@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QByteArray>
 
 #include "SDL_compat.h"
 #include <SDL_ttf.h>
@@ -11,6 +12,12 @@ enum OverlayType {
     OverlayDebug,
     OverlayStatusUpdate,
     OverlayMax
+};
+
+enum OverlayFont {
+    OverlayFontModeSeven,
+    OverlayFontJetBrainsMono,
+    OverlayFontMax
 };
 
 class IOverlayRenderer
@@ -34,6 +41,8 @@ public:
     void setOverlayTextUpdated(OverlayType type);
     void setOverlayState(OverlayType type, bool enabled);
     SDL_Color getOverlayColor(OverlayType type);
+    void setOverlayColor(OverlayType type, SDL_Color color);
+    void setOverlayFont(OverlayType type, OverlayFont font);
     int getOverlayFontSize(OverlayType type);
     SDL_Surface* getUpdatedOverlaySurface(OverlayType type);
 
@@ -46,6 +55,7 @@ private:
     struct {
         bool enabled;
         int fontSize;
+        OverlayFont fontKind;
         SDL_Color color;
         char text[1024];
 
@@ -53,7 +63,7 @@ private:
         SDL_Surface* surface;
     } m_Overlays[OverlayMax];
     IOverlayRenderer* m_Renderer;
-    QByteArray m_FontData;
+    QByteArray m_FontData[OverlayFontMax];
 };
 
 }
