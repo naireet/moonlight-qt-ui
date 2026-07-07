@@ -108,6 +108,22 @@ public:
     };
     Q_ENUM(CaptureSysKeysMode);
 
+    enum StatsOverlayFont
+    {
+        SOF_MODESEVEN,
+        SOF_JETBRAINS_MONO
+    };
+    Q_ENUM(StatsOverlayFont)
+
+    enum StatsOverlayColor
+    {
+        SOC_YELLOW,
+        SOC_WHITE,
+        SOC_GREEN,
+        SOC_CYAN
+    };
+    Q_ENUM(StatsOverlayColor)
+
     Q_PROPERTY(int width MEMBER width NOTIFY displayModeChanged)
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
@@ -129,6 +145,9 @@ public:
     Q_PROPERTY(bool gamepadMouse MEMBER gamepadMouse NOTIFY gamepadMouseChanged)
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
+    Q_PROPERTY(bool statsOverlayLite MEMBER statsOverlayLite NOTIFY statsOverlayLiteChanged)
+    Q_PROPERTY(StatsOverlayFont statsOverlayFont MEMBER statsOverlayFont NOTIFY statsOverlayFontChanged)
+    Q_PROPERTY(StatsOverlayColor statsOverlayColor MEMBER statsOverlayColor NOTIFY statsOverlayColorChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
@@ -170,6 +189,9 @@ public:
     bool gamepadMouse;
     bool detectNetworkBlocking;
     bool showPerformanceOverlay;
+    bool statsOverlayLite;
+    StatsOverlayFont statsOverlayFont;
+    StatsOverlayColor statsOverlayColor;
     bool swapMouseButtons;
     bool muteOnFocusLoss;
     bool backgroundGamepad;
@@ -216,6 +238,9 @@ signals:
     void gamepadMouseChanged();
     void detectNetworkBlockingChanged();
     void showPerformanceOverlayChanged();
+    void statsOverlayLiteChanged();
+    void statsOverlayFontChanged();
+    void statsOverlayColorChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();

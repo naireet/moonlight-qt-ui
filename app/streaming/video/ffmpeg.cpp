@@ -976,6 +976,28 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
     }
 }
 
+void FFmpegVideoDecoder::stringifyVideoStatsLite(VIDEO_STATS& stats, char* output, int length)
+{
+    // Compact single-line overlay, modeled on Artemis/moonlight-android's lite stats mode:
+    // "{avgMbps} Mbps | Delay: {rtt} / {decodeMs} ms | Loss: {lossPct}% | FPS: {totalFps}"
+    double avgMbps = m_BwTracker.GetAverageMbps();
+    double decodeMs = stats.decodedFrames != 0 ?
+                          (double)(stats.totalDecodeTimeUs / 1000.0) / stats.decodedFrames : 0.0;
+    double lossPct = stats.totalFrames != 0 ?
+                          (float)stats.networkDroppedFrames / stats.totalFrames * 100 : 0.0;
+
+    int ret = snprintf(output, length,
+                        "%.1f Mbps | Delay: %u/%.1f ms | Loss: %.1f%% | FPS: %.0f",
+                        avgMbps,
+                        stats.lastRtt,
+                        decodeMs,
+                        lossPct,
+                        stats.totalFps);
+    if (ret < 0 || ret >= length) {
+        SDL_assert(false);
+    }
+}
+
 void FFmpegVideoDecoder::logVideoStats(VIDEO_STATS& stats, const char* title)
 {
     if (stats.renderedFps > 0 || stats.renderedFrames != 0) {
@@ -2022,9 +2044,16 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
             addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
 
-            stringifyVideoStats(lastTwoWndStats,
-                                Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
-                                Session::get()->getOverlayManager().getOverlayMaxTextLength());
+            if (Session::get()->getPreferences()->statsOverlayLite) {
+                stringifyVideoStatsLite(lastTwoWndStats,
+                                    Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
+                                    Session::get()->getOverlayManager().getOverlayMaxTextLength());
+            }
+            else {
+                stringifyVideoStats(lastTwoWndStats,
+                                    Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
+                                    Session::get()->getOverlayManager().getOverlayMaxTextLength());
+            }
             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
         }
 

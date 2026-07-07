@@ -121,6 +121,11 @@ public:
         return m_OverlayManager;
     }
 
+    StreamingPreferences* getPreferences()
+    {
+        return m_Preferences;
+    }
+
     void flushWindowEvents();
 
     void setShouldExit(bool quitHostApp = false);

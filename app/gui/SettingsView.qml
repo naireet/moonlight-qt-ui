@@ -1754,6 +1754,103 @@ Flickable {
                                   qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
                                   qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
                 }
+
+                CheckBox {
+                    id: statsOverlayLite
+                    width: parent.width
+                    text: qsTr("Use compact single-line stats overlay")
+                    font.pointSize: 12
+                    enabled: StreamingPreferences.showPerformanceOverlay
+                    checked: StreamingPreferences.statsOverlayLite
+                    onCheckedChanged: {
+                        StreamingPreferences.statsOverlayLite = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Collapses the performance overlay to a single line showing bitrate, latency, loss, and frame rate.")
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Stats overlay font")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    id: statsOverlayFontComboBox
+                    textRole: "text"
+                    Component.onCompleted: {
+                        var saved_font = StreamingPreferences.statsOverlayFont
+                        currentIndex = 0
+                        for (var i = 0; i < statsOverlayFontListModel.count; i++) {
+                            if (saved_font === statsOverlayFontListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    model: ListModel {
+                        id: statsOverlayFontListModel
+                        ListElement {
+                            text: qsTr("Retro (Mode Seven)")
+                            val: StreamingPreferences.SOF_MODESEVEN
+                        }
+                        ListElement {
+                            text: qsTr("JetBrains Mono")
+                            val: StreamingPreferences.SOF_JETBRAINS_MONO
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.statsOverlayFont = statsOverlayFontListModel.get(currentIndex).val
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Stats overlay color")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    id: statsOverlayColorComboBox
+                    textRole: "text"
+                    Component.onCompleted: {
+                        var saved_color = StreamingPreferences.statsOverlayColor
+                        currentIndex = 0
+                        for (var i = 0; i < statsOverlayColorListModel.count; i++) {
+                            if (saved_color === statsOverlayColorListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    model: ListModel {
+                        id: statsOverlayColorListModel
+                        ListElement {
+                            text: qsTr("Yellow")
+                            val: StreamingPreferences.SOC_YELLOW
+                        }
+                        ListElement {
+                            text: qsTr("White")
+                            val: StreamingPreferences.SOC_WHITE
+                        }
+                        ListElement {
+                            text: qsTr("Green")
+                            val: StreamingPreferences.SOC_GREEN
+                        }
+                        ListElement {
+                            text: qsTr("Cyan")
+                            val: StreamingPreferences.SOC_CYAN
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.statsOverlayColor = statsOverlayColorListModel.get(currentIndex).val
+                    }
+                }
             }
         }
     }

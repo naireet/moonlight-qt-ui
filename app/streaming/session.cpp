@@ -1937,6 +1937,30 @@ void Session::exec()
     // Start rich presence to indicate we're in game
     RichPresenceManager presence(*m_Preferences, m_App.name);
 
+    // Configure the stats overlay appearance from user preferences
+    m_OverlayManager.setOverlayFont(Overlay::OverlayDebug,
+                                     m_Preferences->statsOverlayFont == StreamingPreferences::SOF_JETBRAINS_MONO ?
+                                         Overlay::OverlayFontJetBrainsMono : Overlay::OverlayFontModeSeven);
+    {
+        SDL_Color statsColor;
+        switch (m_Preferences->statsOverlayColor) {
+        case StreamingPreferences::SOC_WHITE:
+            statsColor = {0xFF, 0xFF, 0xFF, 0xFF};
+            break;
+        case StreamingPreferences::SOC_GREEN:
+            statsColor = {0x32, 0xCD, 0x32, 0xFF}; // LimeGreen
+            break;
+        case StreamingPreferences::SOC_CYAN:
+            statsColor = {0x00, 0xFF, 0xFF, 0xFF};
+            break;
+        case StreamingPreferences::SOC_YELLOW:
+        default:
+            statsColor = {0xD0, 0xD0, 0x00, 0xFF};
+            break;
+        }
+        m_OverlayManager.setOverlayColor(Overlay::OverlayDebug, statsColor);
+    }
+
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
