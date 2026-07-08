@@ -1,5 +1,6 @@
 #include "streamingprofilemanager.h"
 
+#include <QCoreApplication>
 #include <QMetaObject>
 #include <QReadWriteLock>
 #include <QSettings>
@@ -85,6 +86,15 @@ StreamingProfileManager::StreamingProfileManager(QQmlEngine* qmlEngine)
     : m_QmlEngine(qmlEngine)
     , m_ApplyingProfile(false)
 {
+    // Coalesce rapid, high-frequency preference changes (e.g. dragging the
+    // bitrate slider) into a single trailing save instead of hitting
+    // QSettings/registry on every tick, which was blocking the GUI thread
+    // and causing visible slider drag lag.
+    m_SaveTimer.setSingleShot(true);
+    m_SaveTimer.setInterval(350);
+    connect(&m_SaveTimer, &QTimer::timeout, this, &StreamingProfileManager::save);
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &StreamingProfileManager::flushPendingSave);
+
     StreamingPreferences* prefs = StreamingPreferences::get(qmlEngine);
 
     connect(prefs, &StreamingPreferences::displayModeChanged, this, [this]() { syncActiveProfileFromPreferences(); });
@@ -324,6 +334,10 @@ void StreamingProfileManager::load()
 
 void StreamingProfileManager::save()
 {
+    if (m_SaveTimer.isActive()) {
+        m_SaveTimer.stop();
+    }
+
     QSettings settings;
 
     settings.beginGroup(SER_PROFILE_GROUP);
@@ -336,6 +350,20 @@ void StreamingProfileManager::save()
     }
     settings.endArray();
     settings.endGroup();
+}
+
+void StreamingProfileManager::scheduleSave()
+{
+    // Restarts the timer on every call, coalescing rapid successive changes
+    // (e.g. dragging a slider) into a single trailing save.
+    m_SaveTimer.start();
+}
+
+void StreamingProfileManager::flushPendingSave()
+{
+    if (m_SaveTimer.isActive()) {
+        save();
+    }
 }
 
 void StreamingProfileManager::ensureDefaultProfileBootstrap()
@@ -378,7 +406,11 @@ void StreamingProfileManager::syncActiveProfileFromPreferences()
 
     if (updatedProfile != m_Profiles.at(profileIndex)) {
         m_Profiles[profileIndex] = updatedProfile;
-        save();
+        // Debounced save -- this handler fires on every high-frequency
+        // preference change (e.g. every tick while dragging the bitrate
+        // slider), so writing to QSettings/registry synchronously here
+        // was blocking the GUI thread and causing visible slider lag.
+        scheduleSave();
     }
 }
 

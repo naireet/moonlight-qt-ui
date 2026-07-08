@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QStringList>
+#include <QTimer>
 #include <QVector>
 
 class QQmlEngine;
@@ -37,6 +38,8 @@ private:
 
     void load();
     void save();
+    void scheduleSave();
+    void flushPendingSave();
     void ensureDefaultProfileBootstrap();
     void syncActiveProfileFromPreferences();
     int findProfileIndex(const QString& profileId) const;
@@ -46,4 +49,6 @@ private:
     QString m_ActiveProfileId;
     QQmlEngine* m_QmlEngine;
     bool m_ApplyingProfile;
+    QTimer m_SaveTimer;
 };
+
