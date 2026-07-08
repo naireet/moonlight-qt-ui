@@ -858,6 +858,36 @@ CenteredGridView {
             }
 
             RoundButton {
+                id: appGridSettingsButton
+                focusPolicy: Qt.NoFocus
+                implicitWidth: 36
+                implicitHeight: 36
+                icon.source: "qrc:/res/settings.svg"
+                icon.width: 18
+                icon.height: 18
+
+                ToolTip.text: qsTr("Settings")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: {
+                    var existingItem = stackView.find(function(item, index) {
+                        return item instanceof SettingsView
+                    })
+
+                    if (existingItem !== null) {
+                        stackView.pop(existingItem)
+                    }
+                    else {
+                        stackView.push("qrc:/gui/SettingsView.qml")
+                    }
+                }
+            }
+
+            RoundButton {
                 id: backButton
                 focusPolicy: Qt.NoFocus
                 implicitWidth: 36

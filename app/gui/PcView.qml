@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.2
+import QtQuick.Controls.Material 2.2
 import QtQuick.Layouts 1.3
 import QtQuick.Effects
 
@@ -704,6 +705,32 @@ FocusScope {
                 }
             }
         }
+    }
+
+    // Floating settings icon button -- restores access to Settings on this
+    // screen now that the stock toolbar (which normally hosts the gear
+    // icon) is hidden here entirely. Positioned as a small corner icon
+    // rather than reviving the full toolbar, consistent with this screen's
+    // otherwise chrome-free full-bleed layout.
+    RoundButton {
+        id: pcSettingsButton
+        parent: pcView
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 14
+        z: 10
+
+        focusPolicy: Qt.NoFocus
+        icon.source: "qrc:/res/settings.svg"
+
+        ToolTip.text: qsTr("Settings")
+        ToolTip.delay: 1000
+        ToolTip.timeout: 3000
+        ToolTip.visible: hovered
+
+        Material.background: Qt.rgba(1, 1, 1, 0.09)
+
+        onClicked: openMoonlightSettings()
     }
 
     // ===== Status pill =====
