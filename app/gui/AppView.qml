@@ -7,6 +7,7 @@ import AppModel 1.0
 import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
 import StreamingPreferences 1.0
+import StreamingProfileManager 1.0
 
 CenteredGridView {
     property int computerIndex
@@ -854,6 +855,39 @@ CenteredGridView {
                                                                     "showGames": showGames
                                                                 })
                     stackView.replace(appGrid, coverflowView, StackView.Immediate)
+                }
+            }
+
+            RoundButton {
+                id: appGridProfileButton
+                focusPolicy: Qt.NoFocus
+                implicitHeight: 36
+                flat: true
+                text: StreamingProfileManager.activeProfileName
+                font.pointSize: 9
+                icon.source: "qrc:/res/person.svg"
+                icon.width: 16
+                icon.height: 16
+
+                ToolTip.text: qsTr("Streaming Profile")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+                Material.foreground: "white"
+
+                onClicked: {
+                    var existingItem = stackView.find(function(item, index) {
+                        return item instanceof SettingsView
+                    })
+
+                    if (existingItem !== null) {
+                        existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
+                    }
+                    else {
+                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6})
+                    }
                 }
             }
 

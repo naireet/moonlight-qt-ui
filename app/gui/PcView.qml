@@ -8,6 +8,7 @@ import ComputerModel 1.0
 
 import ComputerManager 1.0
 import StreamingPreferences 1.0
+import StreamingProfileManager 1.0
 import SystemProperties 1.0
 import SdlGamepadKeyNavigation 1.0
 
@@ -144,6 +145,23 @@ FocusScope {
         }
         else {
             stackView.push("qrc:/gui/SettingsView.qml")
+        }
+    }
+
+    // Jumps straight to the Streaming Profiles page inside Settings -- used by
+    // the floating profile chip so switching/managing profiles doesn't require
+    // digging through the full Settings navigation rail first.
+    function openStreamingProfiles()
+    {
+        var existingItem = stackView.find(function(item, index) {
+            return item instanceof SettingsView
+        })
+
+        if (existingItem !== null) {
+            existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
+        }
+        else {
+            stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6})
         }
     }
 
@@ -1070,6 +1088,38 @@ FocusScope {
         Material.background: Qt.rgba(1, 1, 1, 0.09)
 
         onClicked: openMoonlightSettings()
+    }
+
+    // Floating streaming-profile chip -- always shows the active profile name
+    // and jumps directly to the Streaming Profiles page in Settings on click,
+    // so switching/managing profiles doesn't require digging through the
+    // full Settings navigation rail. Sits just to the left of the gear icon.
+    RoundButton {
+        id: pcProfileButton
+        parent: pcView
+        anchors.top: parent.top
+        anchors.right: pcSettingsButton.left
+        anchors.rightMargin: 10
+        anchors.topMargin: 14
+        z: 10
+
+        focusPolicy: Qt.NoFocus
+        flat: true
+        text: StreamingProfileManager.activeProfileName
+        padding: 12
+        icon.source: "qrc:/res/person.svg"
+        icon.width: 16
+        icon.height: 16
+
+        ToolTip.text: qsTr("Streaming Profile")
+        ToolTip.delay: 1000
+        ToolTip.timeout: 3000
+        ToolTip.visible: hovered
+
+        Material.background: Qt.rgba(1, 1, 1, 0.09)
+        Material.foreground: "white"
+
+        onClicked: openStreamingProfiles()
     }
 
     // ===== Status pill =====
