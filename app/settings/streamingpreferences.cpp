@@ -185,7 +185,12 @@ void StreamingPreferences::reload()
                                                                                                                  : UIDisplayMode::UI_MAXIMIZED)).toInt());
     language = static_cast<Language>(settings.value(SER_LANGUAGE,
                                                     static_cast<int>(Language::LANG_AUTO)).toInt());
-    accentColor = settings.value(SER_ACCENTCOLOR, "#66CCFF").toString();
+    // Default accent matches the aurora redesign's violet/magenta palette
+    // (the previous pastel-cyan default clashed with the aurora background
+    // used across Host Select / App Grid). Matches one of the existing
+    // Personalization swatch presets so the Settings picker still shows a
+    // correctly-highlighted selection.
+    accentColor = settings.value(SER_ACCENTCOLOR, "#B366FF").toString();
     backgroundStyle = static_cast<BackgroundStyle>(settings.value(SER_BACKGROUNDSTYLE,
                                                     static_cast<int>(BackgroundStyle::BackgroundGradient)).toInt());
     backgroundMotionTier = static_cast<BackgroundMotionTier>(settings.value(SER_BACKGROUNDMOTIONTIER,
