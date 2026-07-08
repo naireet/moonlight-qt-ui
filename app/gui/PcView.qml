@@ -36,6 +36,16 @@ FocusScope {
     property string hostActionsDetails: ""
 
     function openHostActions(idx, name, online, paired, wakeable, details) {
+        // Grab a single clean snapshot of the screen for the dialog's
+        // blurred backdrop *before* the scrim/dialog become visible. This
+        // must happen exactly once per open, not continuously ("live"):
+        // hostActionsBackdropSource's sourceItem is pcView itself (an
+        // ancestor), so if it kept re-capturing every frame while the
+        // scrim/blur were already visible, each new snapshot would
+        // include the previous frame's blur+tint, compounding into a
+        // flat grey wash within a few frames -- which is exactly what
+        // happened before this fix.
+        hostActionsBackdropSource.scheduleUpdate()
         hostActionsIndex = idx
         hostActionsName = name
         hostActionsOnline = online
@@ -611,14 +621,55 @@ FocusScope {
     }
 
     // Scrim behind the Host Actions dialog -- covers the FULL pcView
-    // screen, matching the mockup's ".overlay" (rgba(4,5,9,.55)). This
-    // MUST live here, as a sibling of pcList at the pcView root level --
-    // it previously lived per-delegate inside the ListView's delegate
-    // Item, where "anchors.fill: parent" resolved to that single host's
-    // small per-slot bounding box instead of the full screen, which is
-    // why the dim only covered part of the window. A real backdrop blur
-    // of the live scene (the mockup also has backdrop-filter:blur(4px))
-    // is still not attempted -- known gap, heavier lift than a plain tint.
+    // screen, matching the mockup's ".overlay" (rgba(4,5,9,.55) +
+    // backdrop-filter:blur(4px)). This MUST live here, as a sibling of
+    // pcList at the pcView root level -- it previously lived per-delegate
+    // inside the ListView's delegate Item, where "anchors.fill: parent"
+    // resolved to that single host's small per-slot bounding box instead
+    // of the full screen, which is why the dim only covered part of the
+    // window.
+    //
+    // The blur is a snapshot of pcView itself (aurora background,
+    // carousel, wordmark, status pill, etc.) fed through MultiEffect.
+    // "recursive: true" is required because the ShaderEffectSource's own
+    // sourceItem (pcView) is an ancestor of the ShaderEffectSource -- this
+    // is QtQuick's documented, supported pattern for "blur everything
+    // behind me" rather than infinite recursion. The actual Dialog
+    // content itself is never part of this snapshot (Popups render into
+    // the ApplicationWindow's Overlay layer, not inside pcView's own item
+    // tree), so there's no risk of the card blurring itself.
+    //
+    // "live" is deliberately false, with a single explicit
+    // scheduleUpdate() call in openHostActions() right before the dialog
+    // opens (see above) instead of continuous updates. Because
+    // sourceItem is an ancestor, a live/continuous capture would each
+    // frame re-snapshot pcView *including this very blur+scrim's own
+    // output from the previous frame* -- compounding the blur and tint
+    // together every frame until the whole backdrop washed out to flat
+    // grey within a few frames. A one-time snapshot taken before the
+    // scrim/blur ever become visible avoids that feedback loop entirely
+    // and is indistinguishable in practice since the backdrop is static
+    // for the duration of a modal dialog anyway.
+    ShaderEffectSource {
+        id: hostActionsBackdropSource
+        anchors.fill: parent
+        sourceItem: pcView
+        recursive: true
+        live: false
+        visible: false
+        z: 8
+    }
+
+    MultiEffect {
+        anchors.fill: parent
+        source: hostActionsBackdropSource
+        z: 8
+        blurEnabled: true
+        blur: 0.4
+        blurMax: 48
+        visible: pcContextMenuLoader.item !== null && pcContextMenuLoader.item.visible
+    }
+
     Rectangle {
         anchors.fill: parent
         z: 8
@@ -627,16 +678,21 @@ FocusScope {
     }
 
     // Host Actions dialog -- a SINGLE shared instance at the pcView root
-    // level (not one per host delegate). Same root cause as the scrim
-    // above: instantiating this per-delegate meant the Dialog (via its
-    // inherited "anchors.centerIn: Overlay.overlay" from NavigableDialog.qml)
-    // was resolving its position relative to the wrong coordinate context
-    // in that deeply-nested per-delegate setup, rendering it shifted
-    // toward the clicked host's screen position and clipped by the
-    // window edge instead of centered. All content below reads from
-    // pcView's hostActionsXxx properties (set by openHostActions()) rather
-    // than delegate-local "model"/"index" bindings, since there is no
-    // longer a per-host "model" context available at this scope.
+    // level (not one per host delegate), for the same reason as the scrim
+    // above (per-delegate "anchors.fill: parent" only covering one host's
+    // small slot). All content below reads from pcView's hostActionsXxx
+    // properties (set by openHostActions()) rather than delegate-local
+    // "model"/"index" bindings, since there is no longer a per-host
+    // "model" context available at this scope.
+    //
+    // Note: moving this dialog to the root level did NOT, on its own, fix
+    // the separate card-rendered-off-center-and-clipped symptom seen in
+    // an earlier pass -- that had a distinct root cause (see the
+    // ColumnLayout below) unrelated to per-delegate nesting or to
+    // "anchors.centerIn: Overlay.overlay" itself. A control-group test
+    // against deletePcDialog (a pre-existing, unrelated NavigableDialog
+    // elsewhere in this file) confirmed it centers correctly, ruling out
+    // any shared/pre-existing Overlay centering bug.
     Loader {
         id: pcContextMenuLoader
         asynchronous: true
@@ -707,8 +763,21 @@ FocusScope {
             }
 
             ColumnLayout {
-                width: 330
-                spacing: 12
+                // implicitWidth (not just "width") is required here: a
+                // Popup sizes itself (and its background/anchors.centerIn
+                // math) from its content's *implicitWidth*, which Layouts
+                // compute independently of an explicitly-assigned "width".
+                // With only "width: 330" set, this ColumnLayout rendered
+                // its rows at 330px as told, but the Popup itself (and its
+                // background Rectangle, which auto-fills to the Popup's
+                // own size) still computed a much narrower implicit width
+                // from the layout's default implicit-size logic. The
+                // narrower Popup centered correctly, but the 330px-wide
+                // rows inside it overflowed past its right edge -- this
+                // was the actual root cause of the "shifted right and
+                // clipped" symptom, not a per-delegate/Overlay issue.
+                implicitWidth: 330
+                spacing: 16
 
                 // Host name row -- NOT a separate title banner (the
                 // mockup's actual markup is just
