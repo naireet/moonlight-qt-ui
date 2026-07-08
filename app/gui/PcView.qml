@@ -1,5 +1,5 @@
 import QtQuick 2.15
-import QtQuick.Controls 2.2
+import QtQuick.Controls 2.5
 import QtQuick.Controls.Material 2.2
 import QtQuick.Layouts 1.3
 import QtQuick.Effects
@@ -22,6 +22,28 @@ FocusScope {
     readonly property int nodeSlotWidth: 250
     readonly property int selectedNodeSize: 180
     readonly property int sideNodeSize: 110
+
+    // Host Actions dialog context. The dialog itself (and its scrim) live
+    // once at this root level, not per-delegate inside the ListView --
+    // see openHostActions() below and the dialog declaration after the
+    // ListView for why. These properties carry the data for whichever
+    // host the dialog is currently open for.
+    property int hostActionsIndex: -1
+    property string hostActionsName: ""
+    property bool hostActionsOnline: false
+    property bool hostActionsPaired: false
+    property bool hostActionsWakeable: false
+    property string hostActionsDetails: ""
+
+    function openHostActions(idx, name, online, paired, wakeable, details) {
+        hostActionsIndex = idx
+        hostActionsName = name
+        hostActionsOnline = online
+        hostActionsPaired = paired
+        hostActionsWakeable = wakeable
+        hostActionsDetails = details
+        pcContextMenuLoader.item.open()
+    }
 
     id: pcView
     focus: true
@@ -375,7 +397,7 @@ FocusScope {
         Keys.onMenuPressed: {
             // Host actions are presented as a centered dialog rather than a cursor popup.
             if (pcList.currentItem) {
-                pcList.currentItem.pcContextMenu.open()
+                pcList.currentItem.openContextMenu()
             }
         }
 
@@ -395,7 +417,20 @@ FocusScope {
             readonly property bool isSelected: pcList.currentIndex === index
             readonly property string pcName: model.name
             readonly property bool isOnline: model.online
-            property alias pcContextMenu : pcContextMenuLoader.item
+
+            // Opens the shared, root-level Host Actions dialog for THIS
+            // host, passing its data in explicitly via pcView's
+            // hostActionsXxx properties. The dialog itself is not
+            // instantiated per-delegate (see the single Loader declared
+            // after the ListView, outside of any delegate) -- an earlier
+            // per-delegate Loader caused both a broken partial-screen
+            // scrim and an off-center/clipped dialog, root-caused to the
+            // dialog's and scrim's anchors.fill/centerIn resolving against
+            // this delegate's small per-host bounding box instead of the
+            // full window.
+            function openContextMenu() {
+                pcView.openHostActions(index, model.name, model.online, model.paired, model.wakeable, model.details)
+            }
 
             function activate() {
                 if (!pcDelegate.isSelected) {
@@ -427,7 +462,7 @@ FocusScope {
                     }
                 } else {
                     // Using open() here because it may be activated by keyboard
-                    pcContextMenu.open()
+                    pcDelegate.openContextMenu()
                 }
             }
 
@@ -562,323 +597,383 @@ FocusScope {
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: (mouse) => {
                         if (mouse.button === Qt.RightButton) {
-                            pcContextMenu.open()
+                            pcDelegate.openContextMenu()
                         } else {
                             pcDelegate.activate()
                         }
                     }
                     onPressAndHold: {
-                        pcContextMenu.open()
+                        pcDelegate.openContextMenu()
                     }
                 }
             }
+        }
+    }
 
-            Loader {
-                id: pcContextMenuLoader
-                asynchronous: true
-                sourceComponent: NavigableDialog {
-                    id: pcContextMenu
-                    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                    padding: 18
+    // Scrim behind the Host Actions dialog -- covers the FULL pcView
+    // screen, matching the mockup's ".overlay" (rgba(4,5,9,.55)). This
+    // MUST live here, as a sibling of pcList at the pcView root level --
+    // it previously lived per-delegate inside the ListView's delegate
+    // Item, where "anchors.fill: parent" resolved to that single host's
+    // small per-slot bounding box instead of the full screen, which is
+    // why the dim only covered part of the window. A real backdrop blur
+    // of the live scene (the mockup also has backdrop-filter:blur(4px))
+    // is still not attempted -- known gap, heavier lift than a plain tint.
+    Rectangle {
+        anchors.fill: parent
+        z: 8
+        color: Qt.rgba(4/255, 5/255, 9/255, 0.55)
+        visible: pcContextMenuLoader.item !== null && pcContextMenuLoader.item.visible
+    }
 
-                    // Note: a custom Overlay.modal dim delegate (to match
-                    // the mockup's ".overlay" rgba(4,5,9,.55)) was tried
-                    // here but is invalid in this context -- setting the
-                    // Overlay attached property on a Dialog instantiated
-                    // via an asynchronous Loader's sourceComponent throws
-                    // "Non-existent attached object" (the Overlay isn't
-                    // resolvable at binding-evaluation time in this nested,
-                    // deferred-loading setup). Falling back to the
-                    // Dialog's own default dim (from modal: true, inherited
-                    // via NavigableDialog) instead -- functionally
-                    // equivalent, just not custom-colored to the exact
-                    // mockup value.
+    // Host Actions dialog -- a SINGLE shared instance at the pcView root
+    // level (not one per host delegate). Same root cause as the scrim
+    // above: instantiating this per-delegate meant the Dialog (via its
+    // inherited "anchors.centerIn: Overlay.overlay" from NavigableDialog.qml)
+    // was resolving its position relative to the wrong coordinate context
+    // in that deeply-nested per-delegate setup, rendering it shifted
+    // toward the clicked host's screen position and clipped by the
+    // window edge instead of centered. All content below reads from
+    // pcView's hostActionsXxx properties (set by openHostActions()) rather
+    // than delegate-local "model"/"index" bindings, since there is no
+    // longer a per-host "model" context available at this scope.
+    Loader {
+        id: pcContextMenuLoader
+        asynchronous: true
+        sourceComponent: NavigableDialog {
+            id: pcContextMenu
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+            padding: 18
 
-                    // Fade + scale-in/out. The mockup's CSS only toggles
-                    // "display:none" <-> "display:flex" with no transition
-                    // defined, so this isn't a literal mockup requirement --
-                    // it's a small, standard modal-UX polish addition.
-                    enter: Transition {
-                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
-                        NumberAnimation { property: "scale"; from: 0.92; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
-                    }
-                    exit: Transition {
-                        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 120; easing.type: Easing.InCubic }
-                        NumberAnimation { property: "scale"; from: 1.0; to: 0.92; duration: 120; easing.type: Easing.InCubic }
-                    }
+            // Note: 'dim' is not a real Popup property (verified
+            // against Qt's own Popup.qml sources for both the
+            // Basic and Material styles -- neither defines one).
+            // The app's inherited Material-style default dim
+            // (T.Overlay.modal, set inside the style's own
+            // Popup.qml) will still render underneath/alongside
+            // the custom scrim above. Suppressing it would require
+            // overriding Overlay.modal per-instance, which throws
+            // "Non-existent attached object" in this Loader-based
+            // deferred-construction context (see below) --
+            // deliberately not re-attempted this pass given that
+            // already broke the whole screen once. Reported to the
+            // parent session as an open question / known gap
+            // rather than silently declared fixed.
 
-                    // Dark glass card matching the mockup's ".actions-card"
-                    // (rgba(24,26,34,.92), 1px border, 22px radius, soft
-                    // drop shadow).
+            // Fade + scale-in/out. The mockup's CSS only toggles
+            // "display:none" <-> "display:flex" with no transition
+            // defined, so this isn't a literal mockup requirement --
+            // it's a small, standard modal-UX polish addition.
+            enter: Transition {
+                NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "scale"; from: 0.92; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
+            }
+            exit: Transition {
+                NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 120; easing.type: Easing.InCubic }
+                NumberAnimation { property: "scale"; from: 1.0; to: 0.92; duration: 120; easing.type: Easing.InCubic }
+            }
+
+            // Dark glass card matching the mockup's ".actions-card"
+            // (rgba(24,26,34,.92), 1px border, 22px radius, soft
+            // drop shadow). autoPaddingEnabled avoids the shadow
+            // being asymmetrically clipped at the layer bounds.
+            background: Rectangle {
+                color: Qt.rgba(24/255, 26/255, 34/255, 0.92)
+                radius: 22
+                border.width: 1
+                border.color: "#17ffffff"
+
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: Qt.rgba(0, 0, 0, 0.6)
+                    shadowBlur: 1.0
+                    shadowVerticalOffset: 12
+                    shadowHorizontalOffset: 0
+                    autoPaddingEnabled: true
+                }
+            }
+
+            onOpened: {
+                if (viewAllAppsButton.visible) {
+                    viewAllAppsButton.forceActiveFocus()
+                }
+                else if (wakePcButton.visible) {
+                    wakePcButton.forceActiveFocus()
+                }
+                else {
+                    testConnectionButton.forceActiveFocus()
+                }
+            }
+
+            ColumnLayout {
+                width: 330
+                spacing: 12
+
+                // Host name row -- NOT a separate title banner (the
+                // mockup's actual markup is just
+                // '<div class="act primary">Living Room PC</div>',
+                // the first row in the list, same compact size as
+                // every other row, just accent-colored). No
+                // separate "PC Status" text either -- that's not
+                // in the mockup, removed entirely. Implemented as
+                // a real (non-interactive) Button using the exact
+                // same padding/background/contentItem pattern as
+                // every other row below, rather than a bespoke
+                // Rectangle+Label -- a hand-rolled implicitHeight
+                // calc rendered visibly taller than the Button-
+                // driven rows and looked inconsistent (caught via
+                // screenshot comparison), so this guarantees
+                // pixel-identical row height instead.
+                Button {
+                    id: hostTitleButton
+                    Layout.fillWidth: true
+                    text: pcView.hostActionsName
+                    padding: 14
+                    enabled: false
+
                     background: Rectangle {
-                        color: Qt.rgba(24/255, 26/255, 34/255, 0.92)
-                        radius: 22
+                        radius: 14
+                        color: StreamingPreferences.accentColor
+                    }
+                    contentItem: Text {
+                        text: hostTitleButton.text
+                        color: "white"
+                        font.bold: true
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Button {
+                    id: testConnectionButton
+                    Layout.fillWidth: true
+                    text: qsTr("Test Connection")
+                    padding: 14
+
+                    background: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(1, 1, 1, 0.09)
                         border.width: 1
                         border.color: "#17ffffff"
-
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            shadowEnabled: true
-                            shadowColor: Qt.rgba(0, 0, 0, 0.6)
-                            shadowBlur: 1.0
-                            shadowVerticalOffset: 12
-                            shadowHorizontalOffset: 0
-                        }
+                    }
+                    contentItem: Text {
+                        text: testConnectionButton.text
+                        color: "#eef0f6"
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    onOpened: {
-                        if (viewAllAppsButton.visible) {
-                            viewAllAppsButton.forceActiveFocus()
-                        }
-                        else if (wakePcButton.visible) {
-                            wakePcButton.forceActiveFocus()
-                        }
-                        else {
-                            testConnectionButton.forceActiveFocus()
-                        }
+                    onClicked: {
+                        pcContextMenu.close()
+                        computerModel.testConnectionForComputer(pcView.hostActionsIndex)
+                        testConnectionDialog.open()
+                    }
+                }
+
+                Button {
+                    id: renamePcButton
+                    Layout.fillWidth: true
+                    text: qsTr("Rename PC")
+                    padding: 14
+
+                    background: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(1, 1, 1, 0.09)
+                        border.width: 1
+                        border.color: "#17ffffff"
+                    }
+                    contentItem: Text {
+                        text: renamePcButton.text
+                        color: "#eef0f6"
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    ColumnLayout {
-                        width: 330
-                        spacing: 10
+                    onClicked: {
+                        pcContextMenu.close()
+                        renamePcDialog.pcIndex = pcView.hostActionsIndex
+                        renamePcDialog.originalName = pcView.hostActionsName
+                        renamePcDialog.open()
+                    }
+                }
 
-                        // Host name title, styled as a non-interactive
-                        // accent-filled pill/banner -- matches the mockup's
-                        // top ".act primary" row showing the host name.
-                        // Kept non-interactive (simplest/safest) rather than
-                        // turning it into a button, since it has no action
-                        // associated with it in the real app.
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: hostTitleLabel.implicitHeight + 28
+                Button {
+                    id: removeHostButton
+                    Layout.fillWidth: true
+                    text: qsTr("Remove Host")
+                    padding: 14
+
+                    background: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(1, 1, 1, 0.09)
+                        border.width: 1
+                        border.color: "#17ffffff"
+                    }
+                    contentItem: Text {
+                        text: removeHostButton.text
+                        color: "#eef0f6"
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: {
+                        pcContextMenu.close()
+                        deletePcDialog.pcIndex = pcView.hostActionsIndex
+                        deletePcDialog.pcName = pcView.hostActionsName
+                        deletePcDialog.open()
+                    }
+                }
+
+                Button {
+                    id: viewDetailsButton
+                    Layout.fillWidth: true
+                    text: qsTr("View Details")
+                    padding: 14
+
+                    background: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(1, 1, 1, 0.09)
+                        border.width: 1
+                        border.color: "#17ffffff"
+                    }
+                    contentItem: Text {
+                        text: viewDetailsButton.text
+                        color: "#eef0f6"
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: {
+                        pcContextMenu.close()
+                        showPcDetailsDialog.pcDetails = pcView.hostActionsDetails
+                        showPcDetailsDialog.open()
+                    }
+                }
+
+                // Bottom two-column row, matching the mockup's
+                // '.act-row' pairing of the primary/accent action
+                // with "Moonlight Settings". "View All Apps" and
+                // "Wake PC" are mutually exclusive (online+paired
+                // vs. !online+wakeable) so only one ever occupies
+                // the primary/left slot.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Button {
+                        id: viewAllAppsButton
+                        Layout.fillWidth: true
+                        text: qsTr("View All Apps")
+                        visible: pcView.hostActionsOnline && pcView.hostActionsPaired
+                        leftPadding: 10
+                        rightPadding: 10
+                        topPadding: 18
+                        bottomPadding: 18
+
+                        // Primary/accent-filled action -- maps to
+                        // the mockup's accent-filled "Host Apps"
+                        // row (.act.on).
+                        background: Rectangle {
                             radius: 14
                             color: StreamingPreferences.accentColor
-
-                            Label {
-                                id: hostTitleLabel
-                                anchors.centerIn: parent
-                                width: parent.width - 28
-                                text: model.name
-                                font.pointSize: 14
-                                font.bold: true
-                                color: "white"
-                                horizontalAlignment: Text.AlignHCenter
-                                elide: Text.ElideRight
-                            }
+                            border.width: 1
+                            border.color: StreamingPreferences.accentColor
                         }
-
-                        Label {
-                            Layout.fillWidth: true
-                            Layout.topMargin: -4
-                            Layout.bottomMargin: 4
-                            text: qsTr("PC Status: %1").arg(model.online ? qsTr("Online") : qsTr("Offline"))
-                            color: "#9aa0b0"
+                        contentItem: Text {
+                            text: viewAllAppsButton.text
+                            color: "white"
+                            font.bold: true
+                            font.pointSize: 10
                             horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
 
-                        Button {
-                            id: viewAllAppsButton
-                            Layout.fillWidth: true
-                            text: qsTr("View All Apps")
-                            visible: model.online && model.paired
+                        onClicked: {
+                            pcContextMenu.close()
+                            var component = Qt.createComponent("AppView.qml")
+                            var appView = component.createObject(stackView, {"computerIndex": pcView.hostActionsIndex, "objectName": pcView.hostActionsName, "showHiddenGames": true})
+                            stackView.push(appView)
+                        }
+                    }
 
-                            // Primary/accent-filled action -- maps to the
-                            // mockup's accent-filled "Host Apps" row.
-                            background: Rectangle {
-                                implicitHeight: 46
-                                radius: 14
-                                color: StreamingPreferences.accentColor
-                                border.width: 1
-                                border.color: StreamingPreferences.accentColor
-                            }
-                            contentItem: Text {
-                                text: viewAllAppsButton.text
-                                color: "white"
-                                font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
+                    Button {
+                        id: wakePcButton
+                        Layout.fillWidth: true
+                        text: qsTr("Wake PC")
+                        visible: !pcView.hostActionsOnline && pcView.hostActionsWakeable
+                        leftPadding: 10
+                        rightPadding: 10
+                        topPadding: 18
+                        bottomPadding: 18
 
-                            onClicked: {
-                                pcContextMenu.close()
-                                var component = Qt.createComponent("AppView.qml")
-                                var appView = component.createObject(stackView, {"computerIndex": index, "objectName": model.name, "showHiddenGames": true})
-                                stackView.push(appView)
-                            }
+                        // Same primary/accent slot as View All Apps
+                        // above -- mutually exclusive visibility.
+                        background: Rectangle {
+                            radius: 14
+                            color: StreamingPreferences.accentColor
+                            border.width: 1
+                            border.color: StreamingPreferences.accentColor
+                        }
+                        contentItem: Text {
+                            text: wakePcButton.text
+                            color: "white"
+                            font.bold: true
+                            font.pointSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
 
-                        Button {
-                            id: wakePcButton
-                            Layout.fillWidth: true
-                            text: qsTr("Wake PC")
-                            visible: !model.online && model.wakeable
+                        onClicked: {
+                            pcContextMenu.close()
+                            computerModel.wakeComputer(pcView.hostActionsIndex)
+                        }
+                    }
 
-                            background: Rectangle {
-                                implicitHeight: 46
-                                radius: 14
-                                color: Qt.rgba(1, 1, 1, 0.09)
-                                border.width: 1
-                                border.color: "#17ffffff"
-                            }
-                            contentItem: Text {
-                                text: wakePcButton.text
-                                color: "#eef0f6"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
+                    Button {
+                        id: moonlightSettingsButton
+                        Layout.fillWidth: true
+                        text: qsTr("Moonlight Settings")
+                        leftPadding: 10
+                        rightPadding: 10
+                        topPadding: 18
+                        bottomPadding: 18
 
-                            onClicked: {
-                                pcContextMenu.close()
-                                computerModel.wakeComputer(index)
-                            }
+                        background: Rectangle {
+                            radius: 14
+                            color: Qt.rgba(1, 1, 1, 0.09)
+                            border.width: 1
+                            border.color: "#17ffffff"
+                        }
+                        contentItem: Text {
+                            text: moonlightSettingsButton.text
+                            color: "#eef0f6"
+                            font.pointSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
 
-                        Button {
-                            id: testConnectionButton
-                            Layout.fillWidth: true
-                            text: qsTr("Test Connection")
-
-                            background: Rectangle {
-                                implicitHeight: 46
-                                radius: 14
-                                color: Qt.rgba(1, 1, 1, 0.09)
-                                border.width: 1
-                                border.color: "#17ffffff"
-                            }
-                            contentItem: Text {
-                                text: testConnectionButton.text
-                                color: "#eef0f6"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                pcContextMenu.close()
-                                computerModel.testConnectionForComputer(index)
-                                testConnectionDialog.open()
-                            }
-                        }
-
-                        Button {
-                            id: renamePcButton
-                            Layout.fillWidth: true
-                            text: qsTr("Rename PC")
-
-                            background: Rectangle {
-                                implicitHeight: 46
-                                radius: 14
-                                color: Qt.rgba(1, 1, 1, 0.09)
-                                border.width: 1
-                                border.color: "#17ffffff"
-                            }
-                            contentItem: Text {
-                                text: renamePcButton.text
-                                color: "#eef0f6"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                pcContextMenu.close()
-                                renamePcDialog.pcIndex = index
-                                renamePcDialog.originalName = model.name
-                                renamePcDialog.open()
-                            }
-                        }
-
-                        Button {
-                            id: removeHostButton
-                            Layout.fillWidth: true
-                            text: qsTr("Remove Host")
-
-                            background: Rectangle {
-                                implicitHeight: 46
-                                radius: 14
-                                color: Qt.rgba(1, 1, 1, 0.09)
-                                border.width: 1
-                                border.color: "#17ffffff"
-                            }
-                            contentItem: Text {
-                                text: removeHostButton.text
-                                color: "#eef0f6"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            onClicked: {
-                                pcContextMenu.close()
-                                deletePcDialog.pcIndex = index
-                                deletePcDialog.pcName = model.name
-                                deletePcDialog.open()
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Button {
-                                id: viewDetailsButton
-                                Layout.fillWidth: true
-                                text: qsTr("View Details")
-
-                                background: Rectangle {
-                                    implicitHeight: 46
-                                    radius: 14
-                                    color: Qt.rgba(1, 1, 1, 0.09)
-                                    border.width: 1
-                                    border.color: "#17ffffff"
-                                }
-                                contentItem: Text {
-                                    text: viewDetailsButton.text
-                                    color: "#eef0f6"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                onClicked: {
-                                    pcContextMenu.close()
-                                    showPcDetailsDialog.pcDetails = model.details
-                                    showPcDetailsDialog.open()
-                                }
-                            }
-
-                            Button {
-                                id: moonlightSettingsButton
-                                Layout.fillWidth: true
-                                text: qsTr("Moonlight Settings")
-
-                                background: Rectangle {
-                                    implicitHeight: 46
-                                    radius: 14
-                                    color: Qt.rgba(1, 1, 1, 0.09)
-                                    border.width: 1
-                                    border.color: "#17ffffff"
-                                }
-                                contentItem: Text {
-                                    text: moonlightSettingsButton.text
-                                    color: "#eef0f6"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                onClicked: {
-                                    pcContextMenu.close()
-                                    openMoonlightSettings()
-                                }
-                            }
+                        onClicked: {
+                            pcContextMenu.close()
+                            openMoonlightSettings()
                         }
                     }
                 }
             }
+        }
+    }
 
-            Connections {
-                target: pcContextMenuLoader.item
+    Connections {
+        target: pcContextMenuLoader.item
 
-                function onClosed() {
-                    pcContextMenuLoader.parent.forceActiveFocus()
-                }
-            }
+        function onClosed() {
+            pcList.forceActiveFocus()
         }
     }
 
