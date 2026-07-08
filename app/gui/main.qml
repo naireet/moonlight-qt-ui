@@ -263,15 +263,18 @@ ApplicationWindow {
 
     header: ToolBar {
         id: toolBar
-        // The host-select screen has its own full-bleed aurora background,
-        // wordmark, and status pill -- the generic "Computers" toolbar
-        // chrome doesn't belong on top of it, so hide it there only.
+        // The host-select and app-grid screens have their own full-bleed
+        // aurora backgrounds and bespoke header chrome (wordmark/status
+        // pill on Host Select, host/search pill row on App Grid) -- the
+        // generic "Computers" toolbar chrome doesn't belong on top of
+        // either, so hide it there only. Coverflow/Settings/etc. still use
+        // this stock toolbar unchanged.
         // ApplicationWindow already collapses an invisible header's space
         // automatically (same idiom used by addPcButton elsewhere in this
         // file) -- do NOT also bind height/anchors margins to visibility,
         // that fights the window's internal header layout and causes a
         // relayout feedback loop that pegs the UI thread.
-        visible: !(stackView.currentItem instanceof PcView)
+        visible: !(stackView.currentItem instanceof PcView) && !(stackView.currentItem instanceof AppView)
         height: 60
         anchors.topMargin: 5
         anchors.bottomMargin: 5

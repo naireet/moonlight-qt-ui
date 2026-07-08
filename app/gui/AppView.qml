@@ -25,7 +25,7 @@ CenteredGridView {
     id: appGrid
     focus: true
     activeFocusOnTab: true
-    topMargin: 20
+    topMargin: 84
     bottomMargin: 5
     cellWidth: tileWidth + tileGap
     cellHeight: tileHeight + tileGap
@@ -128,45 +128,104 @@ CenteredGridView {
             visible: appBackgroundLayer.showSolidBackground
         }
 
+        // Same three soft, slowly-drifting radial-gradient blobs (violet,
+        // teal, magenta) used on the Host Select screen -- this replaces
+        // the flat single-gradient fallback so the App Grid shares the
+        // same aurora visual identity instead of reading as plain/flat.
         Item {
             anchors.fill: parent
             clip: true
             visible: appBackgroundLayer.showGradientBackground
 
             Rectangle {
-                id: appGradientFill
+                anchors.fill: parent
+                color: "#07080d"
+            }
+
+            Item {
+                id: appAuroraLayer
                 property real driftX: 0
                 property real driftY: 0
-                x: -40 + driftX
-                y: -30 + driftY
-                width: parent.width + 80
-                height: parent.height + 60
-                // Banding trade-off is accepted and deferred for this pass.
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#090A0C" }
-                    GradientStop { position: 0.5; color: Qt.darker(StreamingPreferences.accentColor, 4.8) }
-                    GradientStop { position: 1.0; color: "#090A0C" }
+                property real driftRotation: 0
+                x: -parent.width * 0.1 + driftX
+                y: -parent.height * 0.1 + driftY
+                width: parent.width * 1.2
+                height: parent.height * 1.2
+                rotation: driftRotation
+                transformOrigin: Item.Center
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 64
+                    autoPaddingEnabled: true
+                }
+
+                Rectangle {
+                    width: parent.width * 0.6
+                    height: parent.height * 0.6
+                    x: parent.width * 0.05
+                    y: parent.height * 0.05
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(90/255, 40/255, 200/255, 0.6) }
+                        GradientStop { position: 0.55; color: Qt.rgba(90/255, 40/255, 200/255, 0.16) }
+                        GradientStop { position: 1.0; color: Qt.rgba(90/255, 40/255, 200/255, 0.0) }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width * 0.62
+                    height: parent.height * 0.62
+                    x: parent.width * 0.42
+                    y: parent.height * 0.08
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(20/255, 140/255, 190/255, 0.55) }
+                        GradientStop { position: 0.55; color: Qt.rgba(20/255, 140/255, 190/255, 0.14) }
+                        GradientStop { position: 1.0; color: Qt.rgba(20/255, 140/255, 190/255, 0.0) }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width * 0.58
+                    height: parent.height * 0.58
+                    x: parent.width * 0.28
+                    y: parent.height * 0.52
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(200/255, 40/255, 120/255, 0.5) }
+                        GradientStop { position: 0.55; color: Qt.rgba(200/255, 40/255, 120/255, 0.13) }
+                        GradientStop { position: 1.0; color: Qt.rgba(200/255, 40/255, 120/255, 0.0) }
+                    }
                 }
 
                 SequentialAnimation on driftX {
                     running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
                     loops: Animation.Infinite
-                    NumberAnimation { to: 18; duration: 18000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -18; duration: 18000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 40; duration: 20000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -40; duration: 20000; easing.type: Easing.InOutSine }
                 }
 
                 SequentialAnimation on driftY {
                     running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
                     loops: Animation.Infinite
-                    NumberAnimation { to: 12; duration: 22000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -12; duration: 22000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 30; duration: 26000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -30; duration: 26000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on driftRotation {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 6; duration: 32000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -6; duration: 32000; easing.type: Easing.InOutSine }
                 }
             }
 
             Rectangle {
                 anchors.fill: parent
                 color: "black"
-                opacity: 0.22
+                opacity: 0.12
             }
         }
 
@@ -415,7 +474,13 @@ CenteredGridView {
         Loader {
             active: model.running
             asynchronous: true
-            anchors.fill: appIcon
+            // Anchor to appIconFrame (a direct sibling), not appIcon --
+            // appIcon is now nested one level deeper inside appIconFrame
+            // (the rounded card wrapper), and QML anchors only support
+            // siblings or a direct parent/child, not a grandchild. This
+            // was silently broken (buttons rendered detached from the
+            // tile) until a real running app exposed it.
+            anchors.fill: appIconFrame
 
             sourceComponent: Item {
                 RoundButton {
@@ -482,9 +547,11 @@ CenteredGridView {
             width: appIcon.width
             height: model.running ? runningPlaceholderLabelHeight : appIcon.height
 
-            anchors.left: appIcon.left
-            anchors.right: appIcon.right
-            anchors.bottom: appIcon.bottom
+            // Same grandchild-anchor fix as the running-state Loader above:
+            // anchor to appIconFrame (sibling), not appIcon (grandchild).
+            anchors.left: appIconFrame.left
+            anchors.right: appIconFrame.right
+            anchors.bottom: appIconFrame.bottom
 
             sourceComponent: Label {
                 id: appNameText
@@ -500,8 +567,10 @@ CenteredGridView {
         }
 
         Text {
-            anchors.left: appIcon.left
-            anchors.right: appIcon.right
+            // Same grandchild-anchor fix: appIconFrame is the sibling,
+            // appIcon is nested inside it.
+            anchors.left: appIconFrame.left
+            anchors.right: appIconFrame.right
             anchors.bottom: parent.bottom
             height: parent.height - appIconFrame.y - appIconFrame.height
             horizontalAlignment: Text.AlignHCenter
@@ -660,41 +729,128 @@ CenteredGridView {
         }
     }
 
-    // Toggle button to switch to the coverflow view. Uses the same
-    // StackView.replace() pattern StreamSegue.qml already uses so the
-    // transition happens without a push/pop animation.
-    RoundButton {
-        id: coverflowToggleButton
-        // Reparent to appGrid directly (rather than being an implicit child
-        // of the Flickable's contentItem) so the button stays fixed in the
-        // viewport instead of scrolling away with the grid content.
+    // Custom header row replacing the stock "Computers" ToolBar for this
+    // screen (hidden for AppView in main.qml) -- a lightweight, transparent
+    // pill-based bar matching the mockup's ".appbar": an accent host-name
+    // pill on the left, a search pill in the center (UI-only for now, same
+    // precedent already established by AppCoverflowView's search field),
+    // and small circular icon buttons on the right for the coverflow-view
+    // toggle and going back to Host Select.
+    Item {
+        id: appHeaderBar
         parent: appGrid
         anchors.top: parent.top
+        anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: 10
+        anchors.margins: 14
+        height: 44
         z: 10
 
-        // Don't steal focus from the grid
-        focusPolicy: Qt.NoFocus
+        Rectangle {
+            id: hostPill
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            height: 36
+            radius: height / 2
+            color: StreamingPreferences.accentColor
+            width: hostPillLabel.implicitWidth + 32
 
-        icon.source: "qrc:/res/ic_add_to_queue_white_48px.svg"
+            Label {
+                id: hostPillLabel
+                anchors.centerIn: parent
+                text: appGrid.objectName
+                color: "white"
+                font.bold: true
+                font.pointSize: 10
+            }
+        }
 
-        ToolTip.text: qsTr("Switch to Coverflow View")
-        ToolTip.delay: 1000
-        ToolTip.timeout: 3000
-        ToolTip.visible: hovered
+        Rectangle {
+            id: searchPill
+            anchors.centerIn: parent
+            width: 260
+            height: 36
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.06)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.09)
 
-        Material.background: "#D0808080"
+            TextInput {
+                id: searchField
+                anchors.fill: parent
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                verticalAlignment: Text.AlignVCenter
+                color: "white"
+                font.pointSize: 10
+                clip: true
 
-        onClicked: {
-            var component = Qt.createComponent("AppCoverflowView.qml")
-            var coverflowView = component.createObject(stackView, {
-                                                            "objectName": appGrid.objectName,
-                                                            "computerIndex": computerIndex,
-                                                            "showHiddenGames": showHiddenGames,
-                                                            "showGames": showGames
-                                                        })
-            stackView.replace(appGrid, coverflowView, StackView.Immediate)
+                // Matches the "v1 is UI-only, no filtering yet" precedent
+                // already set by AppCoverflowView's search field -- this is
+                // a visual/appbar-composition pass, not new search feature
+                // work.
+                Text {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("Search apps…")
+                    color: Qt.rgba(1, 1, 1, 0.45)
+                    font.pointSize: 10
+                    visible: !searchField.text.length && !searchField.activeFocus
+                }
+            }
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+
+            RoundButton {
+                id: coverflowToggleButton
+                focusPolicy: Qt.NoFocus
+                implicitWidth: 36
+                implicitHeight: 36
+                icon.source: "qrc:/res/ic_add_to_queue_white_48px.svg"
+                icon.width: 18
+                icon.height: 18
+
+                ToolTip.text: qsTr("Switch to Coverflow View")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: {
+                    var component = Qt.createComponent("AppCoverflowView.qml")
+                    var coverflowView = component.createObject(stackView, {
+                                                                    "objectName": appGrid.objectName,
+                                                                    "computerIndex": computerIndex,
+                                                                    "showHiddenGames": showHiddenGames,
+                                                                    "showGames": showGames
+                                                                })
+                    stackView.replace(appGrid, coverflowView, StackView.Immediate)
+                }
+            }
+
+            RoundButton {
+                id: backButton
+                focusPolicy: Qt.NoFocus
+                implicitWidth: 36
+                implicitHeight: 36
+                icon.source: "qrc:/res/arrow_left.svg"
+                icon.width: 18
+                icon.height: 18
+
+                ToolTip.text: qsTr("Back to Host Select")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: stackView.pop()
+            }
         }
     }
 
