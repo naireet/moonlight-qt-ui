@@ -5,7 +5,10 @@
 
 #include "SDL_compat.h"
 
+class SdlInputHandler;
+
 struct GamepadState {
+    SdlInputHandler* inputHandler;
     SDL_GameController* controller;
     SDL_JoystickID jsId;
     short index;
@@ -17,8 +20,10 @@ struct GamepadState {
 #endif
 
     SDL_TimerID mouseEmulationTimer;
+    SDL_TimerID guideChordTimer;
     uint32_t lastStartDownTime;
 
+    bool guideChordSent;
     bool clickpadButtonEmulationEnabled;
     bool emulatedClickpadButtonDown;
 
@@ -174,7 +179,7 @@ private:
     GamepadState*
     findStateForGamepad(SDL_JoystickID id);
 
-    void sendGamepadState(GamepadState* state);
+    void sendGamepadState(GamepadState* state, int additionalButtons = 0);
 
     void sendGamepadBatteryState(GamepadState* state, SDL_JoystickPowerLevel level);
 
@@ -195,6 +200,9 @@ private:
     Uint32 mouseEmulationTimerCallback(Uint32 interval, void* param);
 
     static
+    Uint32 guideChordTimerCallback(Uint32 interval, void* param);
+
+    static
     Uint32 releaseLeftButtonTimerCallback(Uint32 interval, void* param);
 
     static
@@ -206,6 +214,7 @@ private:
     SDL_Window* m_Window;
     bool m_MultiController;
     bool m_GamepadMouse;
+    bool m_GamepadGuideButtonChord;
     bool m_SwapMouseButtons;
     bool m_ReverseScrollDirection;
     bool m_SwapFaceButtons;

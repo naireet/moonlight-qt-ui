@@ -473,6 +473,8 @@ bool NvComputer::updateAppList(QVector<NvApp> newAppList) {
             if (existingApp.id == newApp.id) {
                 newApp.hidden = existingApp.hidden;
                 newApp.directLaunch = existingApp.directLaunch;
+                newApp.favorite = existingApp.favorite;
+                newApp.favoriteOrder = existingApp.favoriteOrder;
             }
         }
     }

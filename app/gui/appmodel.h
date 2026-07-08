@@ -18,6 +18,8 @@ class AppModel : public QAbstractListModel
         HiddenRole,
         AppIdRole,
         DirectLaunchRole,
+        FavoriteRole,
+        FavoriteOrderRole,
         AppCollectorGameRole,
     };
 
@@ -41,6 +43,12 @@ public:
 
     Q_INVOKABLE void setAppDirectLaunch(int appIndex, bool directLaunch);
 
+    Q_INVOKABLE void setAppFavorite(int appIndex, bool favorite);
+
+    Q_INVOKABLE void moveFavorite(int appIndex, int direction);
+
+    Q_INVOKABLE void commitFavoriteOrder();
+
     QVariant data(const QModelIndex &index, int role) const override;
 
     int rowCount(const QModelIndex &parent) const override;
@@ -59,6 +67,8 @@ private:
     void updateAppList(QVector<NvApp> newList);
 
     QVector<NvApp> getVisibleApps(const QVector<NvApp>& appList);
+
+    bool appDisplayOrderLessThan(const NvApp& app1, const NvApp& app2) const;
 
     bool isAppCurrentlyVisible(const NvApp& app);
 

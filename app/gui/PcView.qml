@@ -11,6 +11,7 @@ import SdlGamepadKeyNavigation 1.0
 
 CenteredGridView {
     property ComputerModel computerModel : createModel()
+    property bool subtleBackgroundMotion: StreamingPreferences.backgroundMotionTier == StreamingPreferences.MotionSubtle
 
     id: pcGrid
     focus: true
@@ -82,6 +83,20 @@ CenteredGridView {
         return model
     }
 
+    function openMoonlightSettings()
+    {
+        var existingItem = stackView.find(function(item, index) {
+            return item instanceof SettingsView
+        })
+
+        if (existingItem !== null) {
+            stackView.pop(existingItem)
+        }
+        else {
+            stackView.push("qrc:/gui/SettingsView.qml")
+        }
+    }
+
     Row {
         anchors.centerIn: parent
         spacing: 5
@@ -106,11 +121,87 @@ CenteredGridView {
 
     model: computerModel
 
+    Item {
+        id: pcBackgroundLayer
+        parent: pcGrid
+        anchors.fill: parent
+        z: -1
+        clip: true
+
+        readonly property bool showSolidBackground: StreamingPreferences.backgroundStyle == StreamingPreferences.BackgroundSolid
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.darker(StreamingPreferences.accentColor, 6)
+            visible: pcBackgroundLayer.showSolidBackground
+        }
+
+        Item {
+            anchors.fill: parent
+            clip: true
+            visible: !pcBackgroundLayer.showSolidBackground
+
+            Rectangle {
+                id: pcGradientFill
+                property real driftX: 0
+                property real driftY: 0
+                x: -40 + driftX
+                y: -30 + driftY
+                width: parent.width + 80
+                height: parent.height + 60
+                // Banding trade-off is accepted and deferred for this pass.
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "#090A0C" }
+                    GradientStop { position: 0.5; color: Qt.darker(StreamingPreferences.accentColor, 4.8) }
+                    GradientStop { position: 1.0; color: "#090A0C" }
+                }
+
+                SequentialAnimation on driftX {
+                    running: pcGrid.subtleBackgroundMotion && !pcBackgroundLayer.showSolidBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 18; duration: 18000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -18; duration: 18000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on driftY {
+                    running: pcGrid.subtleBackgroundMotion && !pcBackgroundLayer.showSolidBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 12; duration: 22000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -12; duration: 22000; easing.type: Easing.InOutSine }
+                }
+            }
+
+            // App art backgrounds intentionally fall back to the gradient on the PC view.
+            Rectangle {
+                anchors.fill: parent
+                color: "black"
+                opacity: 0.22
+            }
+        }
+    }
+
     delegate: NavigableItemDelegate {
         width: 300; height: 320;
         grid: pcGrid
 
         property alias pcContextMenu : pcContextMenuLoader.item
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -6
+            z: 2
+            color: "transparent"
+            border.width: 3
+            border.color: StreamingPreferences.accentColor
+            opacity: parent.highlighted ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 120
+                }
+            }
+        }
 
         Image {
             id: pcIcon
@@ -160,62 +251,150 @@ CenteredGridView {
             elide: Text.ElideRight
         }
 
+        Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 24
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            visible: parent.highlighted
+            z: 1
+            text: qsTr("Back: Options")
+            font.pixelSize: 10
+            color: "#CCFFFFFF"
+        }
+
         Loader {
             id: pcContextMenuLoader
             asynchronous: true
-            sourceComponent: NavigableMenu {
+            sourceComponent: NavigableDialog {
                 id: pcContextMenu
-                initiator: pcContextMenuLoader.parent
-                MenuItem {
-                    text: qsTr("PC Status: %1").arg(model.online ? qsTr("Online") : qsTr("Offline"))
-                    font.bold: true
-                    enabled: false
-                }
-                NavigableMenuItem {
-                    text: qsTr("View All Apps")
-                    onTriggered: {
-                        var component = Qt.createComponent("AppView.qml")
-                        var appView = component.createObject(stackView, {"computerIndex": index, "objectName": model.name, "showHiddenGames": true})
-                        stackView.push(appView)
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                padding: 24
+
+                onOpened: {
+                    if (viewAllAppsButton.visible) {
+                        viewAllAppsButton.forceActiveFocus()
                     }
-                    visible: model.online && model.paired
-                }
-                NavigableMenuItem {
-                    text: qsTr("Wake PC")
-                    onTriggered: computerModel.wakeComputer(index)
-                    visible: !model.online && model.wakeable
-                }
-                NavigableMenuItem {
-                    text: qsTr("Test Network")
-                    onTriggered: {
-                        computerModel.testConnectionForComputer(index)
-                        testConnectionDialog.open()
+                    else if (wakePcButton.visible) {
+                        wakePcButton.forceActiveFocus()
+                    }
+                    else {
+                        testConnectionButton.forceActiveFocus()
                     }
                 }
 
-                NavigableMenuItem {
-                    text: qsTr("Rename PC")
-                    onTriggered: {
-                        renamePcDialog.pcIndex = index
-                        renamePcDialog.originalName = model.name
-                        renamePcDialog.open()
+                ColumnLayout {
+                    width: 360
+                    spacing: 10
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: model.name
+                        font.pointSize: 18
+                        font.bold: true
+                        color: StreamingPreferences.accentColor
+                        elide: Text.ElideRight
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("PC Status: %1").arg(model.online ? qsTr("Online") : qsTr("Offline"))
+                        color: "#CCFFFFFF"
+                        opacity: 0.8
+                    }
+
+                    Button {
+                        id: viewAllAppsButton
+                        Layout.fillWidth: true
+                        text: qsTr("View All Apps")
+                        visible: model.online && model.paired
+                        onClicked: {
+                            pcContextMenu.close()
+                            var component = Qt.createComponent("AppView.qml")
+                            var appView = component.createObject(stackView, {"computerIndex": index, "objectName": model.name, "showHiddenGames": true})
+                            stackView.push(appView)
+                        }
+                    }
+
+                    Button {
+                        id: wakePcButton
+                        Layout.fillWidth: true
+                        text: qsTr("Wake PC")
+                        visible: !model.online && model.wakeable
+                        onClicked: {
+                            pcContextMenu.close()
+                            computerModel.wakeComputer(index)
+                        }
+                    }
+
+                    Button {
+                        id: testConnectionButton
+                        Layout.fillWidth: true
+                        text: qsTr("Test Connection")
+                        onClicked: {
+                            pcContextMenu.close()
+                            computerModel.testConnectionForComputer(index)
+                            testConnectionDialog.open()
+                        }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: qsTr("Rename PC")
+                        onClicked: {
+                            pcContextMenu.close()
+                            renamePcDialog.pcIndex = index
+                            renamePcDialog.originalName = model.name
+                            renamePcDialog.open()
+                        }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: qsTr("Remove Host")
+                        onClicked: {
+                            pcContextMenu.close()
+                            deletePcDialog.pcIndex = index
+                            deletePcDialog.pcName = model.name
+                            deletePcDialog.open()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Button {
+                            Layout.fillWidth: true
+                            text: qsTr("View Details")
+                            onClicked: {
+                                pcContextMenu.close()
+                                showPcDetailsDialog.pcDetails = model.details
+                                showPcDetailsDialog.open()
+                            }
+                        }
+
+                        Button {
+                            Layout.fillWidth: true
+                            text: qsTr("Moonlight Settings")
+                            onClicked: {
+                                pcContextMenu.close()
+                                openMoonlightSettings()
+                            }
+                        }
                     }
                 }
-                NavigableMenuItem {
-                    text: qsTr("Delete PC")
-                    onTriggered: {
-                        deletePcDialog.pcIndex = index
-                        deletePcDialog.pcName = model.name
-                        deletePcDialog.open()
-                    }
-                }
-                NavigableMenuItem {
-                    text: qsTr("View Details")
-                    onTriggered: {
-                        showPcDetailsDialog.pcDetails = model.details
-                        showPcDetailsDialog.open()
-                    }
-                }
+            }
+        }
+
+        Connections {
+            target: pcContextMenuLoader.item
+
+            function onClosed() {
+                pcContextMenuLoader.parent.forceActiveFocus()
             }
         }
 
@@ -249,14 +428,7 @@ CenteredGridView {
         }
 
         onPressAndHold: {
-            // popup() ensures the menu appears under the mouse cursor
-            if (pcContextMenu.popup) {
-                pcContextMenu.popup()
-            }
-            else {
-                // Qt 5.9 doesn't have popup()
-                pcContextMenu.open()
-            }
+            pcContextMenu.open()
         }
 
         MouseArea {
@@ -268,8 +440,7 @@ CenteredGridView {
         }
 
         Keys.onMenuPressed: {
-            // We must use open() here so the menu is positioned on
-            // the ItemDelegate and not where the mouse cursor is
+            // Host actions are presented as a centered dialog rather than a cursor popup.
             pcContextMenu.open()
         }
 

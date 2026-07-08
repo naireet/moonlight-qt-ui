@@ -9,10 +9,34 @@ import SystemProperties 1.0
 Item {
     property Session session
     property string appName
+    property string boxArtImageUrl: ""
     property string stageText : isResume ? qsTr("Resuming %1...").arg(appName) :
                                            qsTr("Starting %1...").arg(appName)
     property bool isResume : false
     property bool quitAfter : false
+
+    Item {
+        anchors.fill: parent
+        clip: true
+        visible: boxArtImageUrl !== ""
+
+        Image {
+            anchors.centerIn: parent
+            width: Math.round(parent.width * 1.18)
+            height: Math.round(parent.height * 1.18)
+            source: boxArtImageUrl
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: true
+            opacity: 0.92
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+            opacity: 0.82
+        }
+    }
 
     function stageStarting(stage)
     {
