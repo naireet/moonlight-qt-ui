@@ -266,13 +266,14 @@ FocusScope {
 
                 // Slow continuous rotation -- small ambient branding
                 // flourish next to the wordmark, matching the coded
-                // mockup's always-spinning logo icon.
+                // mockup's always-spinning logo icon (.wordmark .spinner,
+                // "animation: spin 3.5s linear infinite").
                 RotationAnimation on rotation {
                     running: true
                     loops: Animation.Infinite
                     from: 0
                     to: 360
-                    duration: 8000
+                    duration: 3500
                 }
             }
 
