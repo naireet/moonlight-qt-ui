@@ -245,6 +245,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
 
             Item {
+                id: moonIcon
                 width: 22
                 height: 22
                 anchors.verticalCenter: parent.verticalCenter
@@ -261,6 +262,17 @@ FocusScope {
                     anchors.right: parent.right
                     radius: height / 2
                     color: "#07080d"
+                }
+
+                // Slow continuous rotation -- small ambient branding
+                // flourish next to the wordmark, matching the coded
+                // mockup's always-spinning logo icon.
+                RotationAnimation on rotation {
+                    running: true
+                    loops: Animation.Infinite
+                    from: 0
+                    to: 360
+                    duration: 8000
                 }
             }
 
