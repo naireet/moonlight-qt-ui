@@ -746,14 +746,66 @@ CenteredGridView {
         height: 44
         z: 10
 
+        // Soft glow halo behind the pill, same MultiEffect blur idiom used
+        // for the tile emphasis glow -- gives it real presence against the
+        // aurora background instead of just sitting flat.
+        Rectangle {
+            id: hostPillGlow
+            anchors.centerIn: hostPill
+            width: hostPill.width + 20
+            height: hostPill.height + 20
+            radius: height / 2
+            color: StreamingPreferences.accentColor
+            opacity: 0.32
+
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 32
+                autoPaddingEnabled: true
+            }
+        }
+
         Rectangle {
             id: hostPill
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            height: 36
+            height: 40
             radius: height / 2
-            color: StreamingPreferences.accentColor
-            width: hostPillLabel.implicitWidth + 32
+            width: hostPillLabel.implicitWidth + 42
+            clip: true
+            border.width: 1
+            border.color: Qt.lighter(StreamingPreferences.accentColor, 1.3)
+            // Gentle diagonal gradient for a bit of depth instead of a flat
+            // sticker-like fill, without blowing out into a glare.
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.lighter(StreamingPreferences.accentColor, 1.12) }
+                GradientStop { position: 1.0; color: Qt.darker(StreamingPreferences.accentColor, 1.2) }
+            }
+
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Qt.rgba(0, 0, 0, 0.45)
+                shadowBlur: 0.6
+                shadowVerticalOffset: 3
+                shadowHorizontalOffset: 0
+            }
+
+            // Thin top-edge highlight for a glassy "pill button" pop,
+            // matching the light-catching look used elsewhere in the
+            // aurora design language.
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 1
+                height: parent.height * 0.45
+                radius: parent.radius - 1
+                color: Qt.rgba(1, 1, 1, 0.14)
+            }
 
             Label {
                 id: hostPillLabel
@@ -761,7 +813,9 @@ CenteredGridView {
                 text: appGrid.objectName
                 color: "white"
                 font.bold: true
-                font.pointSize: 10
+                font.pointSize: 11
+                style: Text.Raised
+                styleColor: Qt.rgba(0, 0, 0, 0.4)
             }
         }
 
