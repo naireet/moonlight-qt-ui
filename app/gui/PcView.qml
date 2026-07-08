@@ -579,7 +579,52 @@ FocusScope {
                 sourceComponent: NavigableDialog {
                     id: pcContextMenu
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                    padding: 24
+                    padding: 18
+
+                    // Note: a custom Overlay.modal dim delegate (to match
+                    // the mockup's ".overlay" rgba(4,5,9,.55)) was tried
+                    // here but is invalid in this context -- setting the
+                    // Overlay attached property on a Dialog instantiated
+                    // via an asynchronous Loader's sourceComponent throws
+                    // "Non-existent attached object" (the Overlay isn't
+                    // resolvable at binding-evaluation time in this nested,
+                    // deferred-loading setup). Falling back to the
+                    // Dialog's own default dim (from modal: true, inherited
+                    // via NavigableDialog) instead -- functionally
+                    // equivalent, just not custom-colored to the exact
+                    // mockup value.
+
+                    // Fade + scale-in/out. The mockup's CSS only toggles
+                    // "display:none" <-> "display:flex" with no transition
+                    // defined, so this isn't a literal mockup requirement --
+                    // it's a small, standard modal-UX polish addition.
+                    enter: Transition {
+                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
+                        NumberAnimation { property: "scale"; from: 0.92; to: 1.0; duration: 160; easing.type: Easing.OutCubic }
+                    }
+                    exit: Transition {
+                        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 120; easing.type: Easing.InCubic }
+                        NumberAnimation { property: "scale"; from: 1.0; to: 0.92; duration: 120; easing.type: Easing.InCubic }
+                    }
+
+                    // Dark glass card matching the mockup's ".actions-card"
+                    // (rgba(24,26,34,.92), 1px border, 22px radius, soft
+                    // drop shadow).
+                    background: Rectangle {
+                        color: Qt.rgba(24/255, 26/255, 34/255, 0.92)
+                        radius: 22
+                        border.width: 1
+                        border.color: "#17ffffff"
+
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            shadowEnabled: true
+                            shadowColor: Qt.rgba(0, 0, 0, 0.6)
+                            shadowBlur: 1.0
+                            shadowVerticalOffset: 12
+                            shadowHorizontalOffset: 0
+                        }
+                    }
 
                     onOpened: {
                         if (viewAllAppsButton.visible) {
@@ -594,23 +639,41 @@ FocusScope {
                     }
 
                     ColumnLayout {
-                        width: 360
+                        width: 330
                         spacing: 10
 
-                        Label {
+                        // Host name title, styled as a non-interactive
+                        // accent-filled pill/banner -- matches the mockup's
+                        // top ".act primary" row showing the host name.
+                        // Kept non-interactive (simplest/safest) rather than
+                        // turning it into a button, since it has no action
+                        // associated with it in the real app.
+                        Rectangle {
                             Layout.fillWidth: true
-                            text: model.name
-                            font.pointSize: 18
-                            font.bold: true
+                            implicitHeight: hostTitleLabel.implicitHeight + 28
+                            radius: 14
                             color: StreamingPreferences.accentColor
-                            elide: Text.ElideRight
+
+                            Label {
+                                id: hostTitleLabel
+                                anchors.centerIn: parent
+                                width: parent.width - 28
+                                text: model.name
+                                font.pointSize: 14
+                                font.bold: true
+                                color: "white"
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                            }
                         }
 
                         Label {
                             Layout.fillWidth: true
+                            Layout.topMargin: -4
+                            Layout.bottomMargin: 4
                             text: qsTr("PC Status: %1").arg(model.online ? qsTr("Online") : qsTr("Offline"))
-                            color: "#CCFFFFFF"
-                            opacity: 0.8
+                            color: "#9aa0b0"
+                            horizontalAlignment: Text.AlignHCenter
                         }
 
                         Button {
@@ -618,6 +681,24 @@ FocusScope {
                             Layout.fillWidth: true
                             text: qsTr("View All Apps")
                             visible: model.online && model.paired
+
+                            // Primary/accent-filled action -- maps to the
+                            // mockup's accent-filled "Host Apps" row.
+                            background: Rectangle {
+                                implicitHeight: 46
+                                radius: 14
+                                color: StreamingPreferences.accentColor
+                                border.width: 1
+                                border.color: StreamingPreferences.accentColor
+                            }
+                            contentItem: Text {
+                                text: viewAllAppsButton.text
+                                color: "white"
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
                             onClicked: {
                                 pcContextMenu.close()
                                 var component = Qt.createComponent("AppView.qml")
@@ -631,6 +712,21 @@ FocusScope {
                             Layout.fillWidth: true
                             text: qsTr("Wake PC")
                             visible: !model.online && model.wakeable
+
+                            background: Rectangle {
+                                implicitHeight: 46
+                                radius: 14
+                                color: Qt.rgba(1, 1, 1, 0.09)
+                                border.width: 1
+                                border.color: "#17ffffff"
+                            }
+                            contentItem: Text {
+                                text: wakePcButton.text
+                                color: "#eef0f6"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
                             onClicked: {
                                 pcContextMenu.close()
                                 computerModel.wakeComputer(index)
@@ -641,6 +737,21 @@ FocusScope {
                             id: testConnectionButton
                             Layout.fillWidth: true
                             text: qsTr("Test Connection")
+
+                            background: Rectangle {
+                                implicitHeight: 46
+                                radius: 14
+                                color: Qt.rgba(1, 1, 1, 0.09)
+                                border.width: 1
+                                border.color: "#17ffffff"
+                            }
+                            contentItem: Text {
+                                text: testConnectionButton.text
+                                color: "#eef0f6"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
                             onClicked: {
                                 pcContextMenu.close()
                                 computerModel.testConnectionForComputer(index)
@@ -649,8 +760,24 @@ FocusScope {
                         }
 
                         Button {
+                            id: renamePcButton
                             Layout.fillWidth: true
                             text: qsTr("Rename PC")
+
+                            background: Rectangle {
+                                implicitHeight: 46
+                                radius: 14
+                                color: Qt.rgba(1, 1, 1, 0.09)
+                                border.width: 1
+                                border.color: "#17ffffff"
+                            }
+                            contentItem: Text {
+                                text: renamePcButton.text
+                                color: "#eef0f6"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
                             onClicked: {
                                 pcContextMenu.close()
                                 renamePcDialog.pcIndex = index
@@ -660,8 +787,24 @@ FocusScope {
                         }
 
                         Button {
+                            id: removeHostButton
                             Layout.fillWidth: true
                             text: qsTr("Remove Host")
+
+                            background: Rectangle {
+                                implicitHeight: 46
+                                radius: 14
+                                color: Qt.rgba(1, 1, 1, 0.09)
+                                border.width: 1
+                                border.color: "#17ffffff"
+                            }
+                            contentItem: Text {
+                                text: removeHostButton.text
+                                color: "#eef0f6"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
                             onClicked: {
                                 pcContextMenu.close()
                                 deletePcDialog.pcIndex = index
@@ -675,8 +818,24 @@ FocusScope {
                             spacing: 10
 
                             Button {
+                                id: viewDetailsButton
                                 Layout.fillWidth: true
                                 text: qsTr("View Details")
+
+                                background: Rectangle {
+                                    implicitHeight: 46
+                                    radius: 14
+                                    color: Qt.rgba(1, 1, 1, 0.09)
+                                    border.width: 1
+                                    border.color: "#17ffffff"
+                                }
+                                contentItem: Text {
+                                    text: viewDetailsButton.text
+                                    color: "#eef0f6"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
                                 onClicked: {
                                     pcContextMenu.close()
                                     showPcDetailsDialog.pcDetails = model.details
@@ -685,8 +844,24 @@ FocusScope {
                             }
 
                             Button {
+                                id: moonlightSettingsButton
                                 Layout.fillWidth: true
                                 text: qsTr("Moonlight Settings")
+
+                                background: Rectangle {
+                                    implicitHeight: 46
+                                    radius: 14
+                                    color: Qt.rgba(1, 1, 1, 0.09)
+                                    border.width: 1
+                                    border.color: "#17ffffff"
+                                }
+                                contentItem: Text {
+                                    text: moonlightSettingsButton.text
+                                    color: "#eef0f6"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
                                 onClicked: {
                                     pcContextMenu.close()
                                     openMoonlightSettings()
