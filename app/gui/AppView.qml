@@ -1,6 +1,7 @@
-import QtQuick 2.9
+import QtQuick 2.15
 import QtQuick.Controls 2.2
 import QtQuick.Controls.Material 2.2
+import QtQuick.Effects
 
 import AppModel 1.0
 import ComputerManager 1.0
@@ -223,7 +224,8 @@ CenteredGridView {
         width: appGrid.tileWidth
         height: appGrid.tileHeight
         grid: appGrid
-        scale: appGrid.isReorderTarget(model.appid) ? 1.08 : 1.0
+        scale: appGrid.isReorderTarget(model.appid) ? 1.08 :
+               ((highlighted || hovered) ? 1.04 : 1.0)
         transformOrigin: Item.Center
 
         leftKeyHandler: function(event) {
@@ -319,6 +321,8 @@ CenteredGridView {
         property string boxArtSource: model.boxart
         property bool hasUsableBackgroundArt: boxArtSource !== "" && appIcon.status === Image.Ready && !appIcon.isPlaceholder
         property string segueBoxArtImageUrl: hasUsableBackgroundArt ? boxArtSource : ""
+        property int tileRadius: Math.round(14 * tileScaleFactor)
+        property bool tileEmphasized: highlighted || hovered
 
         // Dim the app if it's hidden
         opacity: model.hidden ? 0.4 : 1.0
@@ -332,29 +336,80 @@ CenteredGridView {
             visible: appGrid.isReorderTarget(model.appid)
         }
 
-        Image {
-            property bool isPlaceholder: false
+        // Soft accent-colored glow behind the tile when it has focus/hover,
+        // matching the mockup's ".tile.sel" outer glow. Uses the same
+        // MultiEffect blur idiom as the aurora background blobs elsewhere
+        // in this app.
+        Rectangle {
+            id: appIconGlow
+            anchors.centerIn: appIconFrame
+            width: appIconFrame.width + Math.round(28 * tileScaleFactor)
+            height: appIconFrame.height + Math.round(28 * tileScaleFactor)
+            radius: tileRadius + Math.round(10 * tileScaleFactor)
+            color: StreamingPreferences.accentColor
+            opacity: tileEmphasized ? 0.55 : 0.0
+            visible: opacity > 0.01
 
-            id: appIcon
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: Math.round(10 * StreamingPreferences.appGridTileScale / 100)
-            source: model.boxart
-            width: Math.round(200 * StreamingPreferences.appGridTileScale / 100)
-            height: Math.round(267 * StreamingPreferences.appGridTileScale / 100)
-
-            onSourceSizeChanged: {
-                // Nearly all of Nvidia's official box art does not match the dimensions of placeholder
-                // images, however the one known exception is Overcooked. Therefore, we only execute
-                // the image size checks if this is not an app collector game. We know the officially
-                // supported games all have box art, so this check is not required.
-                isPlaceholder = appGrid.isPlaceholderBoxArt(sourceSize.width, sourceSize.height, model.appCollectorGame)
+            Behavior on opacity {
+                NumberAnimation { duration: 120 }
             }
 
-            // Display a tooltip with the full name if it's truncated
-            ToolTip.text: model.name
-            ToolTip.delay: 1000
-            ToolTip.timeout: 5000
-            ToolTip.visible: (parent.hovered || parent.highlighted) && (!appNameText || appNameText.truncated)
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 32
+                autoPaddingEnabled: true
+            }
+        }
+
+        // Rounded, drop-shadowed card that frames the box art -- gives the
+        // flat square tiles a "card" treatment matching the mockup's
+        // border-radius + box-shadow tile styling. This owns the geometry
+        // the box art Image previously had directly; the Image now just
+        // fills this frame so its corners get clipped to match.
+        Rectangle {
+            id: appIconFrame
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Math.round(10 * StreamingPreferences.appGridTileScale / 100)
+            width: Math.round(200 * StreamingPreferences.appGridTileScale / 100)
+            height: Math.round(267 * StreamingPreferences.appGridTileScale / 100)
+            radius: tileRadius
+            clip: true
+            color: "transparent"
+            border.width: tileEmphasized ? 3 : 0
+            border.color: StreamingPreferences.accentColor
+
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#99000000"
+                shadowBlur: 0.7
+                shadowVerticalOffset: Math.round(8 * tileScaleFactor)
+                shadowHorizontalOffset: 0
+            }
+
+            Image {
+                property bool isPlaceholder: false
+
+                id: appIcon
+                anchors.fill: parent
+                source: model.boxart
+
+                onSourceSizeChanged: {
+                    // Nearly all of Nvidia's official box art does not match the dimensions of placeholder
+                    // images, however the one known exception is Overcooked. Therefore, we only execute
+                    // the image size checks if this is not an app collector game. We know the officially
+                    // supported games all have box art, so this check is not required.
+                    isPlaceholder = appGrid.isPlaceholderBoxArt(sourceSize.width, sourceSize.height, model.appCollectorGame)
+                }
+
+                // Display a tooltip with the full name if it's truncated
+                ToolTip.text: model.name
+                ToolTip.delay: 1000
+                ToolTip.timeout: 5000
+                ToolTip.visible: (parent.parent.hovered || parent.parent.highlighted) && (!appNameText || appNameText.truncated)
+            }
         }
 
         Loader {
@@ -448,7 +503,7 @@ CenteredGridView {
             anchors.left: appIcon.left
             anchors.right: appIcon.right
             anchors.bottom: parent.bottom
-            height: parent.height - appIcon.y - appIcon.height
+            height: parent.height - appIconFrame.y - appIconFrame.height
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
