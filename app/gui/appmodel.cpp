@@ -1,5 +1,7 @@
 #include "appmodel.h"
 
+#include <algorithm>
+
 AppModel::AppModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -91,6 +93,10 @@ QVariant AppModel::data(const QModelIndex &index, int role) const
         return app.id;
     case DirectLaunchRole:
         return app.directLaunch;
+    case FavoriteRole:
+        return app.favorite;
+    case FavoriteOrderRole:
+        return app.favoriteOrder;
     case AppCollectorGameRole:
         return app.isAppCollectorGame;
     default:
@@ -108,6 +114,8 @@ QHash<int, QByteArray> AppModel::roleNames() const
     names[HiddenRole] = "hidden";
     names[AppIdRole] = "appid";
     names[DirectLaunchRole] = "directLaunch";
+    names[FavoriteRole] = "favorite";
+    names[FavoriteOrderRole] = "favoriteOrder";
     names[AppCollectorGameRole] = "appCollectorGame";
 
     return names;
@@ -129,6 +137,28 @@ bool AppModel::isAppCurrentlyVisible(const NvApp& app)
     return false;
 }
 
+bool AppModel::appDisplayOrderLessThan(const NvApp& app1, const NvApp& app2) const
+{
+    if (app1.favorite != app2.favorite) {
+        return app1.favorite && !app2.favorite;
+    }
+
+    if (app1.favorite) {
+        const bool app1HasExplicitOrder = app1.favoriteOrder >= 0;
+        const bool app2HasExplicitOrder = app2.favoriteOrder >= 0;
+
+        if (app1HasExplicitOrder != app2HasExplicitOrder) {
+            return app1HasExplicitOrder && !app2HasExplicitOrder;
+        }
+
+        if (app1HasExplicitOrder && app1.favoriteOrder != app2.favoriteOrder) {
+            return app1.favoriteOrder < app2.favoriteOrder;
+        }
+    }
+
+    return app1.name.toLower() < app2.name.toLower();
+}
+
 QVector<NvApp> AppModel::getVisibleApps(const QVector<NvApp>& appList)
 {
     QVector<NvApp> visibleApps;
@@ -141,6 +171,11 @@ QVector<NvApp> AppModel::getVisibleApps(const QVector<NvApp>& appList)
             visibleApps.append(app);
         }
     }
+
+    std::stable_sort(visibleApps.begin(), visibleApps.end(),
+                     [this](const NvApp& app1, const NvApp& app2) {
+        return appDisplayOrderLessThan(app1, app2);
+    });
 
     return visibleApps;
 }
@@ -189,7 +224,7 @@ void AppModel::updateAppList(QVector<NvApp> newList)
                 found = true;
                 break;
             }
-            else if (existingApp.name.toLower() > newApp.name.toLower()) {
+            else if (appDisplayOrderLessThan(newApp, existingApp)) {
                 insertionIndex = i;
                 break;
             }
@@ -200,6 +235,25 @@ void AppModel::updateAppList(QVector<NvApp> newList)
             m_VisibleApps.insert(insertionIndex, newApp);
             endInsertRows();
         }
+    }
+
+    for (int i = 0; i < newVisibleList.count(); i++) {
+        if (m_VisibleApps.at(i).id == newVisibleList.at(i).id) {
+            continue;
+        }
+
+        int currentIndex = -1;
+        for (int j = i + 1; j < m_VisibleApps.count(); j++) {
+            if (m_VisibleApps.at(j).id == newVisibleList.at(i).id) {
+                currentIndex = j;
+                break;
+            }
+        }
+
+        Q_ASSERT(currentIndex >= 0);
+        beginMoveRows(QModelIndex(), currentIndex, currentIndex, QModelIndex(), i);
+        m_VisibleApps.move(currentIndex, i);
+        endMoveRows();
     }
 
     Q_ASSERT(newVisibleList == m_VisibleApps);
@@ -243,6 +297,150 @@ void AppModel::setAppDirectLaunch(int appIndex, bool directLaunch)
                 // find our matching app ID.
                 app.directLaunch = false;
                 break;
+            }
+        }
+    }
+
+    m_ComputerManager->clientSideAttributeUpdated(m_Computer);
+}
+
+void AppModel::setAppFavorite(int appIndex, bool favorite)
+{
+    Q_ASSERT(appIndex < m_VisibleApps.count());
+    int appId = m_VisibleApps.at(appIndex).id;
+
+    {
+        QWriteLocker lock(&m_Computer->lock);
+
+        for (NvApp& app : m_Computer->appList) {
+            if (app.id == appId) {
+                if (favorite) {
+                    if (!app.favorite) {
+                        app.favorite = true;
+                        app.favoriteOrder = -1;
+                    }
+                }
+                else {
+                    app.favorite = false;
+                    app.favoriteOrder = -1;
+                }
+                break;
+            }
+        }
+    }
+
+    m_ComputerManager->clientSideAttributeUpdated(m_Computer);
+}
+
+void AppModel::moveFavorite(int appIndex, int direction)
+{
+    Q_ASSERT(appIndex < m_VisibleApps.count());
+
+    if (direction != -1 && direction != 1) {
+        return;
+    }
+
+    NvApp app = m_VisibleApps.at(appIndex);
+    if (!app.favorite) {
+        return;
+    }
+
+    {
+        QWriteLocker lock(&m_Computer->lock);
+        QVector<NvApp> favoriteApps;
+
+        for (const NvApp& existingApp : std::as_const(m_Computer->appList)) {
+            if (existingApp.favorite) {
+                favoriteApps.append(existingApp);
+            }
+        }
+
+        if (favoriteApps.count() < 2) {
+            return;
+        }
+
+        std::stable_sort(favoriteApps.begin(), favoriteApps.end(),
+                         [this](const NvApp& app1, const NvApp& app2) {
+            return appDisplayOrderLessThan(app1, app2);
+        });
+
+        int currentFavoriteIndex = -1;
+        for (int i = 0; i < favoriteApps.count(); i++) {
+            if (favoriteApps.at(i).id == app.id) {
+                currentFavoriteIndex = i;
+                break;
+            }
+        }
+
+        if (currentFavoriteIndex < 0) {
+            return;
+        }
+
+        // Skip over any favorites that aren't currently visible in this grid
+        // (e.g. hidden games when "show hidden" isn't enabled here), so a
+        // reorder always swaps with the next visible neighbor rather than
+        // silently swapping against a favorite the user can't see.
+        int swapIndex = currentFavoriteIndex + direction;
+        while (swapIndex >= 0 && swapIndex < favoriteApps.count() &&
+               !isAppCurrentlyVisible(favoriteApps.at(swapIndex))) {
+            swapIndex += direction;
+        }
+
+        if (swapIndex < 0 || swapIndex >= favoriteApps.count()) {
+            return;
+        }
+
+        for (int i = 0; i < favoriteApps.count(); i++) {
+            favoriteApps[i].favoriteOrder = i;
+        }
+
+        std::swap(favoriteApps[currentFavoriteIndex].favoriteOrder,
+                  favoriteApps[swapIndex].favoriteOrder);
+
+        for (NvApp& existingApp : m_Computer->appList) {
+            for (const NvApp& favoriteApp : std::as_const(favoriteApps)) {
+                if (existingApp.id == favoriteApp.id) {
+                    existingApp.favoriteOrder = favoriteApp.favoriteOrder;
+                    break;
+                }
+            }
+        }
+    }
+
+    updateAppList(m_Computer->appList);
+}
+
+void AppModel::commitFavoriteOrder()
+{
+    {
+        QWriteLocker lock(&m_Computer->lock);
+        QVector<NvApp> favoriteApps;
+
+        for (const NvApp& app : std::as_const(m_Computer->appList)) {
+            if (app.favorite) {
+                favoriteApps.append(app);
+            }
+        }
+
+        std::stable_sort(favoriteApps.begin(), favoriteApps.end(),
+                         [this](const NvApp& app1, const NvApp& app2) {
+            return appDisplayOrderLessThan(app1, app2);
+        });
+
+        for (int i = 0; i < favoriteApps.count(); i++) {
+            favoriteApps[i].favoriteOrder = i;
+        }
+
+        for (NvApp& app : m_Computer->appList) {
+            if (!app.favorite) {
+                continue;
+            }
+
+            for (const NvApp& favoriteApp : std::as_const(favoriteApps)) {
+                if (app.id == favoriteApp.id) {
+                    app.favoriteOrder = favoriteApp.favoriteOrder;
+                    break;
+                }
             }
         }
     }

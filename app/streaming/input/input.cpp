@@ -12,6 +12,7 @@
 SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, int streamHeight)
     : m_MultiController(prefs.multiController),
       m_GamepadMouse(prefs.gamepadMouse),
+      m_GamepadGuideButtonChord(prefs.gamepadGuideButtonChord),
       m_SwapMouseButtons(prefs.swapMouseButtons),
       m_ReverseScrollDirection(prefs.reverseScrollDirection),
       m_SwapFaceButtons(prefs.swapFaceButtons),
@@ -206,6 +207,9 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
 SdlInputHandler::~SdlInputHandler()
 {
     for (int i = 0; i < MAX_GAMEPADS; i++) {
+        if (m_GamepadState[i].guideChordTimer != 0) {
+            SDL_RemoveTimer(m_GamepadState[i].guideChordTimer);
+        }
         if (m_GamepadState[i].mouseEmulationTimer != 0) {
             Session::get()->notifyMouseEmulationMode(false);
             SDL_RemoveTimer(m_GamepadState[i].mouseEmulationTimer);

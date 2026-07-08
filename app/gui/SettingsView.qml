@@ -3,6 +3,7 @@ import QtQuick.Controls 2.2
 import QtQuick.Layouts 1.2
 import QtQuick.Window 2.2
 
+import StreamingProfileManager 1.0
 import StreamingPreferences 1.0
 import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
@@ -14,9 +15,26 @@ Flickable {
 
     signal languageChanged()
 
+    property int navigationRailWidth: 180
+    property int navigationRailSpacing: 12
+    property bool syncingStreamingProfileUi: false
+    property var streamingProfileNamesModel: []
+    property var streamingProfileIdsModel: []
+    property var settingsSectionTitles: [
+        qsTr("Basic Settings"),
+        qsTr("Audio Settings"),
+        qsTr("Host Settings"),
+        qsTr("UI Settings"),
+        qsTr("Input Settings"),
+        qsTr("Gamepad Settings"),
+        qsTr("Advanced Settings"),
+        qsTr("Streaming Profiles"),
+        qsTr("Personalization")
+    ]
+
     boundsBehavior: Flickable.OvershootBounds
 
-    contentWidth: settingsColumn1.width > settingsColumn2.width ? settingsColumn1.width : settingsColumn2.width
+    contentWidth: settingsColumn2.x + settingsColumn2.width
     contentHeight: settingsColumn1.height > settingsColumn2.height ? settingsColumn1.height : settingsColumn2.height
 
     ScrollBar.vertical: ScrollBar {
@@ -35,6 +53,43 @@ Flickable {
             item = item.parent
         }
         return false
+    }
+
+    function sectionTarget(index) {
+        switch (index) {
+        case 0:
+            return basicSettingsGroupBox
+        case 1:
+            return audioSettingsGroupBox
+        case 2:
+            return hostSettingsGroupBox
+        case 3:
+            return uiSettingsGroupBox
+        case 4:
+            return inputSettingsGroupBox
+        case 5:
+            return gamepadSettingsGroupBox
+        case 6:
+            return advancedSettingsGroupBox
+        case 7:
+            return streamingProfilesGroupBox
+        case 8:
+            return personalizationGroupBox
+        default:
+            return null
+        }
+    }
+
+    function scrollToSection(section) {
+        if (!section) {
+            return
+        }
+
+        var pos = section.mapToItem(contentItem, 0, 0)
+        var maxContentY = Math.max(contentHeight - height, 0)
+        autoScrollAnimation.from = contentY
+        autoScrollAnimation.to = Math.max(0, Math.min(pos.y, maxContentY))
+        autoScrollAnimation.start()
     }
 
     NumberAnimation on contentY {
@@ -80,6 +135,192 @@ Flickable {
         }
     }
 
+    function refreshStreamingProfiles() {
+        streamingProfileNamesModel = StreamingProfileManager.profileNames()
+        streamingProfileIdsModel = StreamingProfileManager.profileIds()
+
+        if (!streamingProfileComboBox) {
+            return
+        }
+
+        var activeIndex = -1
+        for (var i = 0; i < streamingProfileIdsModel.length; i++) {
+            if (streamingProfileIdsModel[i] === StreamingProfileManager.activeProfileId) {
+                activeIndex = i
+                break
+            }
+        }
+        if (activeIndex >= 0) {
+            streamingProfileComboBox.currentIndex = activeIndex
+        }
+        else if (streamingProfileIdsModel.length > 0) {
+            streamingProfileComboBox.currentIndex = 0
+        }
+        else {
+            streamingProfileComboBox.currentIndex = -1
+        }
+    }
+
+    function syncStreamingProfileControls() {
+        syncingStreamingProfileUi = true
+        try {
+            var savedWidth = StreamingPreferences.width
+            var savedHeight = StreamingPreferences.height
+            var resolutionIndex = -1
+            var customResolutionIndex = -1
+            for (var i = 0; i < resolutionListModel.count; i++) {
+                var resolutionWidth = parseInt(resolutionListModel.get(i).video_width)
+                var resolutionHeight = parseInt(resolutionListModel.get(i).video_height)
+
+                if (resolutionListModel.get(i).is_custom) {
+                    customResolutionIndex = i
+                }
+
+                if (savedWidth === resolutionWidth && savedHeight === resolutionHeight) {
+                    resolutionIndex = i
+                }
+            }
+
+            if (resolutionIndex >= 0) {
+                resolutionComboBox.currentIndex = resolutionIndex
+                if (customResolutionIndex >= 0) {
+                    resolutionListModel.setProperty(customResolutionIndex, "text", qsTr("Custom"))
+                    resolutionListModel.setProperty(customResolutionIndex, "video_width", "")
+                    resolutionListModel.setProperty(customResolutionIndex, "video_height", "")
+                }
+            }
+            else if (customResolutionIndex >= 0) {
+                resolutionListModel.setProperty(customResolutionIndex, "text", qsTr("Custom") + " (" + savedWidth + "x" + savedHeight + ")")
+                resolutionListModel.setProperty(customResolutionIndex, "video_width", "" + savedWidth)
+                resolutionListModel.setProperty(customResolutionIndex, "video_height", "" + savedHeight)
+                resolutionComboBox.currentIndex = customResolutionIndex
+            }
+            resolutionComboBox.lastIndexValue = resolutionComboBox.currentIndex
+            resolutionComboBox.recalculateWidth()
+
+            var savedFps = StreamingPreferences.fps
+            var fpsIndex = -1
+            var customFpsIndex = -1
+            for (i = 0; i < fpsListModel.count; i++) {
+                var existingFps = parseInt(fpsListModel.get(i).video_fps)
+                if (fpsListModel.get(i).is_custom) {
+                    customFpsIndex = i
+                }
+
+                if (savedFps === existingFps) {
+                    fpsIndex = i
+                }
+            }
+
+            if (fpsIndex >= 0) {
+                fpsComboBox.currentIndex = fpsIndex
+                if (customFpsIndex >= 0) {
+                    fpsListModel.setProperty(customFpsIndex, "text", qsTr("Custom"))
+                    fpsListModel.setProperty(customFpsIndex, "video_fps", "")
+                }
+            }
+            else if (customFpsIndex >= 0) {
+                fpsListModel.setProperty(customFpsIndex, "text", qsTr("Custom (%1 FPS)").arg(savedFps))
+                fpsListModel.setProperty(customFpsIndex, "video_fps", "" + savedFps)
+                fpsComboBox.currentIndex = customFpsIndex
+            }
+            fpsComboBox.lastIndexValue = fpsComboBox.currentIndex
+            fpsComboBox.recalculateWidth()
+
+            if (windowModeComboBox.visible && windowModeComboBox.model) {
+                for (i = 0; i < windowModeComboBox.model.count; i++) {
+                    if (windowModeComboBox.model.get(i).val === StreamingPreferences.windowMode) {
+                        windowModeComboBox.currentIndex = i
+                        break
+                    }
+                }
+            }
+
+            for (i = 0; i < audioListModel.count; i++) {
+                if (audioListModel.get(i).val === StreamingPreferences.audioConfig) {
+                    audioComboBox.currentIndex = i
+                    break
+                }
+            }
+
+            for (i = 0; i < decoderListModel.count; i++) {
+                if (decoderListModel.get(i).val === StreamingPreferences.videoDecoderSelection) {
+                    decoderComboBox.currentIndex = i
+                    break
+                }
+            }
+
+            codecComboBox.currentIndex = 0
+            for (i = 0; i < codecListModel.count; i++) {
+                if (codecListModel.get(i).val === StreamingPreferences.videoCodecConfig) {
+                    codecComboBox.currentIndex = i
+                    break
+                }
+            }
+
+            slider.value = Qt.binding(function() { return StreamingPreferences.bitrateKbps })
+            bitrateTitle.text = qsTr("Video bitrate: %1 Mbps").arg(StreamingPreferences.bitrateKbps / 1000.0)
+
+            vsyncCheck.checked = Qt.binding(function() { return StreamingPreferences.enableVsync })
+            framePacingCheck.checked = Qt.binding(function() { return StreamingPreferences.enableVsync && StreamingPreferences.framePacing })
+            enableHdr.checked = Qt.binding(function() { return enableHdr.enabled && StreamingPreferences.enableHdr })
+            audioPcCheck.checked = Qt.binding(function() { return !StreamingPreferences.playAudioOnHost })
+            quitAppAfter.checked = Qt.binding(function() { return StreamingPreferences.quitAppAfter })
+            singleControllerCheck.checked = Qt.binding(function() { return !StreamingPreferences.multiController })
+            enableYUV444.checked = Qt.binding(function() { return StreamingPreferences.enableYUV444 })
+            unlockBitrate.checked = Qt.binding(function() { return StreamingPreferences.unlockBitrate })
+        }
+        finally {
+            syncingStreamingProfileUi = false
+        }
+    }
+
+    function selectedStreamingProfileId() {
+        if (!streamingProfileComboBox || streamingProfileComboBox.currentIndex < 0 ||
+                streamingProfileComboBox.currentIndex >= streamingProfileIdsModel.length) {
+            return ""
+        }
+
+        return streamingProfileIdsModel[streamingProfileComboBox.currentIndex]
+    }
+
+    function selectedStreamingProfileName() {
+        if (!streamingProfileComboBox || streamingProfileComboBox.currentIndex < 0 ||
+                streamingProfileComboBox.currentIndex >= streamingProfileNamesModel.length) {
+            return ""
+        }
+
+        return streamingProfileNamesModel[streamingProfileComboBox.currentIndex]
+    }
+
+    function isStreamingProfileNameAvailable(name, excludedProfileId) {
+        var normalizedName = name.trim().toLowerCase()
+        if (!normalizedName.length) {
+            return false
+        }
+
+        for (var i = 0; i < streamingProfileNamesModel.length; i++) {
+            var currentId = i < streamingProfileIdsModel.length ? streamingProfileIdsModel[i] : ""
+            if (currentId !== excludedProfileId &&
+                    streamingProfileNamesModel[i].trim().toLowerCase() === normalizedName) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    Component.onCompleted: refreshStreamingProfiles()
+
+    Connections {
+        target: StreamingProfileManager
+        onProfileListChanged: settingsPage.refreshStreamingProfiles()
+        onActiveProfileChanged: {
+            settingsPage.refreshStreamingProfiles()
+            settingsPage.syncStreamingProfileControls()
+        }
+    }
+
     StackView.onDeactivating: {
         SdlGamepadKeyNavigation.setUiNavMode(false)
 
@@ -93,10 +334,53 @@ Flickable {
         StreamingPreferences.save()
     }
 
+    Rectangle {
+        id: settingsNavigationRail
+        parent: settingsPage
+        z: 10
+        width: navigationRailWidth
+        color: "#22000000"
+        border.color: "#33000000"
+        radius: 6
+        anchors {
+            left: settingsPage.left
+            top: settingsPage.top
+            bottom: settingsPage.bottom
+            margins: 10
+        }
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 8
+
+            Label {
+                width: parent.width
+                text: qsTr("Sections")
+                font.pointSize: 11
+                font.bold: true
+                color: "white"
+            }
+
+            Repeater {
+                model: settingsSectionTitles
+
+                Button {
+                    width: parent.width
+                    text: modelData
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: settingsPage.scrollToSection(settingsPage.sectionTarget(index))
+                }
+            }
+        }
+    }
+
     Column {
         padding: 10
         id: settingsColumn1
-        width: settingsPage.width / 2
+        x: navigationRailWidth + navigationRailSpacing
+        width: (settingsPage.width - x) / 2
         spacing: 15
 
         GroupBox {
@@ -700,6 +984,9 @@ Flickable {
 
                         onValueChanged: {
                             bitrateTitle.text = qsTr("Video bitrate: %1 Mbps").arg(value / 1000.0)
+                            if (settingsPage.syncingStreamingProfileUi) {
+                                return
+                            }
                             StreamingPreferences.bitrateKbps = value
                         }
 
@@ -823,6 +1110,9 @@ Flickable {
                         font.pointSize:  12
                         checked: StreamingPreferences.enableVsync
                         onCheckedChanged: {
+                            if (settingsPage.syncingStreamingProfileUi) {
+                                return
+                            }
                             StreamingPreferences.enableVsync = checked
                         }
 
@@ -840,6 +1130,9 @@ Flickable {
                         enabled: StreamingPreferences.enableVsync
                         checked: StreamingPreferences.enableVsync && StreamingPreferences.framePacing
                         onCheckedChanged: {
+                            if (settingsPage.syncingStreamingProfileUi) {
+                                return
+                            }
                             StreamingPreferences.framePacing = checked
                         }
                         ToolTip.delay: 1000
@@ -858,6 +1151,9 @@ Flickable {
                     enabled: SystemProperties.supportsHdr
                     checked: enabled && StreamingPreferences.enableHdr
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         StreamingPreferences.enableHdr = checked
                     }
 
@@ -940,6 +1236,9 @@ Flickable {
                     font.pointSize: 12
                     checked: !StreamingPreferences.playAudioOnHost
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         StreamingPreferences.playAudioOnHost = !checked
                     }
 
@@ -997,6 +1296,9 @@ Flickable {
                     font.pointSize: 12
                     checked: StreamingPreferences.quitAppAfter
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         StreamingPreferences.quitAppAfter = checked
                     }
 
@@ -1251,6 +1553,76 @@ Flickable {
                     }
                 }
 
+                Label {
+                    width: parent.width
+                    id: appGridTileScaleTitle
+                    text: qsTr("Tile size: %1%").arg(Math.round(appGridTileScaleSlider.value))
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Adjust the size of app tiles in the grid.")
+                    font.pointSize: 9
+                    wrapMode: Text.Wrap
+                }
+
+                Slider {
+                    id: appGridTileScaleSlider
+                    width: parent.width
+                    value: StreamingPreferences.appGridTileScale
+                    stepSize: 5
+                    from: 60
+                    to: 100
+                    snapMode: "SnapOnRelease"
+
+                    onValueChanged: {
+                        var roundedValue = Math.round(value)
+                        appGridTileScaleTitle.text = qsTr("Tile size: %1%").arg(roundedValue)
+                        StreamingPreferences.appGridTileScale = roundedValue
+                    }
+
+                    Component.onCompleted: {
+                        languageChanged.connect(valueChanged)
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    id: appGridTileGapTitle
+                    text: qsTr("Tile gap: %1 px").arg(Math.round(appGridTileGapSlider.value))
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Adjust the spacing between app tiles in the grid.")
+                    font.pointSize: 9
+                    wrapMode: Text.Wrap
+                }
+
+                Slider {
+                    id: appGridTileGapSlider
+                    width: parent.width
+                    value: StreamingPreferences.appGridTileGap
+                    stepSize: 1
+                    from: 4
+                    to: 24
+                    snapMode: "SnapOnRelease"
+
+                    onValueChanged: {
+                        var roundedValue = Math.round(value)
+                        appGridTileGapTitle.text = qsTr("Tile gap: %1 px").arg(roundedValue)
+                        StreamingPreferences.appGridTileGap = roundedValue
+                    }
+
+                    Component.onCompleted: {
+                        languageChanged.connect(valueChanged)
+                    }
+                }
+
                 CheckBox {
                     id: connectionWarningsCheck
                     width: parent.width
@@ -1314,7 +1686,7 @@ Flickable {
         rightPadding: 20
         anchors.left: settingsColumn1.right
         id: settingsColumn2
-        width: settingsPage.width / 2
+        width: settingsColumn1.width
         spacing: 15
 
         GroupBox {
@@ -1499,6 +1871,9 @@ Flickable {
                     font.pointSize:  12
                     checked: !StreamingPreferences.multiController
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         StreamingPreferences.multiController = !checked
                     }
 
@@ -1519,6 +1894,23 @@ Flickable {
                     onCheckedChanged: {
                         StreamingPreferences.gamepadMouse = checked
                     }
+                }
+
+                CheckBox {
+                    id: gamepadGuideButtonChordCheck
+                    hoverEnabled: true
+                    width: parent.width
+                    text: qsTr("Send Guide button press to host on Start+Select (Steam Deck)")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.gamepadGuideButtonChord
+                    onCheckedChanged: {
+                        StreamingPreferences.gamepadGuideButtonChord = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Works around Steam Deck handling the Steam/Guide button locally by sending a host-side Guide button pulse after holding Start+Select for 450 ms while streaming.")
                 }
 
                 CheckBox {
@@ -1664,6 +2056,9 @@ Flickable {
 
                     checked: StreamingPreferences.enableYUV444
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         // This is called on init, so only reset to default bitrate when checked state changes.
                         if (StreamingPreferences.enableYUV444 != checked) {
                             StreamingPreferences.enableYUV444 = checked
@@ -1694,6 +2089,9 @@ Flickable {
 
                     checked: StreamingPreferences.unlockBitrate
                     onCheckedChanged: {
+                        if (settingsPage.syncingStreamingProfileUi) {
+                            return
+                        }
                         StreamingPreferences.unlockBitrate = checked
                         StreamingPreferences.bitrateKbps = Math.min(StreamingPreferences.bitrateKbps, slider.to)
                         slider.value = StreamingPreferences.bitrateKbps
@@ -1851,6 +2249,354 @@ Flickable {
                         StreamingPreferences.statsOverlayColor = statsOverlayColorListModel.get(currentIndex).val
                     }
                 }
+            }
+        }
+
+        GroupBox {
+            id: streamingProfilesGroupBox
+            width: (parent.width - (parent.leftPadding + parent.rightPadding))
+            padding: 12
+            title: "<font color=\"skyblue\">" + qsTr("Streaming Profiles") + "</font>"
+            font.pointSize: 12
+
+            Column {
+                anchors.fill: parent
+                spacing: 8
+
+                SettingRow {
+                    width: parent.width
+                    label: qsTr("Active Profile")
+                    description: qsTr("Switch named streaming presets without changing the rest of the app settings.")
+
+                    ComboBox {
+                        id: streamingProfileComboBox
+                        width: 220
+                        model: streamingProfileNamesModel
+
+                        onActivated: {
+                            var profileId = settingsPage.selectedStreamingProfileId()
+                            if (profileId.length > 0) {
+                                StreamingProfileManager.setActiveProfile(profileId)
+                            }
+                        }
+                    }
+                }
+
+                SettingRow {
+                    width: parent.width
+                    label: qsTr("Create or Update")
+                    description: qsTr("Capture the current streaming settings as a new profile or rename/duplicate the selected one.")
+
+                    Column {
+                        width: 220
+                        spacing: 6
+
+                        Button {
+                            width: parent.width
+                            text: qsTr("Create from Current")
+                            onClicked: {
+                                profileNameDialog.mode = "create"
+                                profileNameDialog.targetProfileId = ""
+                                profileNameDialog.title = qsTr("Create Streaming Profile")
+                                profileNameField.text = ""
+                                profileNameDialog.open()
+                            }
+                        }
+
+                        Button {
+                            width: parent.width
+                            enabled: streamingProfileComboBox.currentIndex >= 0
+                            text: qsTr("Duplicate")
+                            onClicked: {
+                                profileNameDialog.mode = "duplicate"
+                                profileNameDialog.targetProfileId = settingsPage.selectedStreamingProfileId()
+                                profileNameDialog.title = qsTr("Duplicate Streaming Profile")
+                                profileNameField.text = qsTr("%1 Copy").arg(settingsPage.selectedStreamingProfileName())
+                                profileNameDialog.open()
+                            }
+                        }
+
+                        Button {
+                            width: parent.width
+                            enabled: streamingProfileComboBox.currentIndex >= 0
+                            text: qsTr("Rename")
+                            onClicked: {
+                                profileNameDialog.mode = "rename"
+                                profileNameDialog.targetProfileId = settingsPage.selectedStreamingProfileId()
+                                profileNameDialog.title = qsTr("Rename Streaming Profile")
+                                profileNameField.text = settingsPage.selectedStreamingProfileName()
+                                profileNameDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                SettingRow {
+                    width: parent.width
+                    label: qsTr("Maintenance")
+                    description: qsTr("Delete the selected profile or restore its streaming values to the default preset.")
+
+                    Column {
+                        width: 220
+                        spacing: 6
+
+                        Button {
+                            width: parent.width
+                            enabled: streamingProfileComboBox.currentIndex >= 0 && streamingProfileNamesModel.length > 1
+                            text: qsTr("Delete")
+                            onClicked: {
+                                deleteProfileDialog.profileId = settingsPage.selectedStreamingProfileId()
+                                deleteProfileDialog.profileName = settingsPage.selectedStreamingProfileName()
+                                deleteProfileDialog.open()
+                            }
+                        }
+
+                        Button {
+                            width: parent.width
+                            enabled: streamingProfileComboBox.currentIndex >= 0
+                            text: qsTr("Reset to Defaults")
+                            onClicked: StreamingProfileManager.resetProfileToDefaults(settingsPage.selectedStreamingProfileId())
+                        }
+                    }
+                }
+            }
+        }
+
+        // Background rendering intentionally stays within the modules shipped by the
+        // AppImage CI build, so these visuals use only plain Rectangle/Image/
+        // Gradient/opacity composition.
+        GroupBox {
+            id: personalizationGroupBox
+            width: (parent.width - (parent.leftPadding + parent.rightPadding))
+            padding: 12
+            title: "<font color=\"skyblue\">" + qsTr("Personalization") + "</font>"
+            font.pointSize: 12
+
+            Column {
+                anchors.fill: parent
+                spacing: 8
+
+                SettingRow {
+                    width: parent.width
+                    label: qsTr("Accent Color")
+                    description: qsTr("Choose a highlight color used for selection and accents throughout the UI.")
+
+                    Grid {
+                        id: accentColorSwatchGrid
+                        columns: 4
+                        spacing: 8
+                        function applyAccentColor(accentColor) {
+                            StreamingPreferences.accentColor = accentColor
+                            StreamingPreferences.save()
+                        }
+
+                        Repeater {
+                            id: accentColorSwatchRepeater
+                            model: [ "#66CCFF", "#FF66CC", "#66FF99", "#FFA366", "#B366FF", "#FF6666", "#FFDD66", "#6699FF" ]
+
+                            Button {
+                                id: accentSwatchButton
+                                width: 28
+                                height: 28
+                                padding: 0
+                                flat: true
+                                hoverEnabled: true
+                                focusPolicy: Qt.StrongFocus
+                                activeFocusOnTab: true
+                                text: qsTr("Accent color %1").arg(modelData)
+                                onClicked: accentColorSwatchGrid.applyAccentColor(modelData)
+                                KeyNavigation.left: index % accentColorSwatchGrid.columns !== 0 ?
+                                                        accentColorSwatchRepeater.itemAt(index - 1) : null
+                                KeyNavigation.right: index + 1 < accentColorSwatchRepeater.count &&
+                                                     index % accentColorSwatchGrid.columns !== accentColorSwatchGrid.columns - 1 ?
+                                                        accentColorSwatchRepeater.itemAt(index + 1) : null
+                                KeyNavigation.up: index >= accentColorSwatchGrid.columns ?
+                                                      accentColorSwatchRepeater.itemAt(index - accentColorSwatchGrid.columns) : null
+                                KeyNavigation.down: index + accentColorSwatchGrid.columns < accentColorSwatchRepeater.count ?
+                                                        accentColorSwatchRepeater.itemAt(index + accentColorSwatchGrid.columns) : null
+
+                                background: Rectangle {
+                                    radius: 6
+                                    color: modelData
+                                    border.width: StreamingPreferences.accentColor === modelData ? 3 :
+                                                  accentSwatchButton.activeFocus ? 2 : 1
+                                    border.color: StreamingPreferences.accentColor === modelData ? "white" :
+                                                  accentSwatchButton.activeFocus ? "#CCFFFFFF" : "#33000000"
+                                }
+
+                                contentItem: Item {}
+
+                                ToolTip.delay: 1000
+                                ToolTip.timeout: 5000
+                                ToolTip.visible: hovered || activeFocus
+                                ToolTip.text: text
+                            }
+                        }
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Background style")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    id: backgroundStyleComboBox
+                    textRole: "text"
+                    Component.onCompleted: {
+                        var saved_style = StreamingPreferences.backgroundStyle
+                        currentIndex = 0
+                        for (var i = 0; i < backgroundStyleListModel.count; i++) {
+                            if (saved_style === backgroundStyleListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    model: ListModel {
+                        id: backgroundStyleListModel
+                        ListElement {
+                            text: qsTr("Solid Color")
+                            val: StreamingPreferences.BackgroundSolid
+                        }
+                        ListElement {
+                            text: qsTr("Gradient")
+                            val: StreamingPreferences.BackgroundGradient
+                        }
+                        ListElement {
+                            text: qsTr("App Cover Art")
+                            val: StreamingPreferences.BackgroundAppArt
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.backgroundStyle = backgroundStyleListModel.get(currentIndex).val
+                        StreamingPreferences.save()
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Background motion")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    id: backgroundMotionComboBox
+                    textRole: "text"
+                    Component.onCompleted: {
+                        var saved_motion = StreamingPreferences.backgroundMotionTier
+                        currentIndex = 0
+                        for (var i = 0; i < backgroundMotionListModel.count; i++) {
+                            if (saved_motion === backgroundMotionListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    model: ListModel {
+                        id: backgroundMotionListModel
+                        ListElement {
+                            text: qsTr("Off")
+                            val: StreamingPreferences.MotionOff
+                        }
+                        ListElement {
+                            text: qsTr("Static")
+                            val: StreamingPreferences.MotionStatic
+                        }
+                        ListElement {
+                            text: qsTr("Subtle")
+                            val: StreamingPreferences.MotionSubtle
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.backgroundMotionTier = backgroundMotionListModel.get(currentIndex).val
+                        StreamingPreferences.save()
+                    }
+                }
+            }
+        }
+
+        NavigableDialog {
+            id: profileNameDialog
+            property string mode: ""
+            property string targetProfileId: ""
+            standardButtons: Dialog.Ok | Dialog.Cancel
+
+            function isInputValid() {
+                return settingsPage.isStreamingProfileNameAvailable(profileNameField.text, mode === "rename" ? targetProfileId : "")
+            }
+
+            onOpened: {
+                profileNameField.forceActiveFocus()
+                profileNameField.selectAll()
+
+                if (profileNameDialog.standardButton) {
+                    profileNameDialog.standardButton(Dialog.Ok).enabled = profileNameDialog.isInputValid()
+                }
+            }
+
+            onClosed: {
+                mode = ""
+                targetProfileId = ""
+                title = ""
+                profileNameField.clear()
+            }
+
+            onAccepted: {
+                var trimmedName = profileNameField.text.trim()
+                if (!trimmedName.length) {
+                    reject()
+                    return
+                }
+
+                if (mode === "create") {
+                    StreamingProfileManager.createProfileFromCurrent(trimmedName)
+                }
+                else if (mode === "duplicate") {
+                    StreamingProfileManager.duplicateProfile(targetProfileId, trimmedName)
+                }
+                else if (mode === "rename") {
+                    StreamingProfileManager.renameProfile(targetProfileId, trimmedName)
+                }
+            }
+
+            ColumnLayout {
+                Label {
+                    text: qsTr("Profile name")
+                    font.bold: true
+                }
+
+                TextField {
+                    id: profileNameField
+                    Layout.minimumWidth: 280
+
+                    onTextChanged: {
+                        if (profileNameDialog.standardButton) {
+                            profileNameDialog.standardButton(Dialog.Ok).enabled = profileNameDialog.isInputValid()
+                        }
+                    }
+
+                    Keys.onReturnPressed: profileNameDialog.accept()
+                    Keys.onEnterPressed: profileNameDialog.accept()
+                }
+            }
+        }
+
+        NavigableMessageDialog {
+            id: deleteProfileDialog
+            property string profileId: ""
+            property string profileName: ""
+            text: qsTr("Delete the \"%1\" streaming profile?").arg(profileName)
+            standardButtons: Dialog.Yes | Dialog.No
+
+            onAccepted: StreamingProfileManager.deleteProfile(profileId)
+
+            onClosed: {
+                profileId = ""
+                profileName = ""
             }
         }
     }

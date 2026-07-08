@@ -52,6 +52,7 @@
 #include "backend/computermanager.h"
 #include "backend/systemproperties.h"
 #include "streaming/session.h"
+#include "settings/streamingprofilemanager.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
 
@@ -963,6 +964,11 @@ int main(int argc, char *argv[])
                                                    [](QQmlEngine* qmlEngine, QJSEngine*) -> QObject* {
                                                        return StreamingPreferences::get(qmlEngine);
                                                    });
+    qmlRegisterSingletonType<StreamingProfileManager>("StreamingProfileManager", 1, 0,
+                                                      "StreamingProfileManager",
+                                                      [](QQmlEngine* qmlEngine, QJSEngine*) -> QObject* {
+                                                          return StreamingProfileManager::get(qmlEngine);
+                                                      });
 
     // Create the identity manager on the main thread
     IdentityManager::get();

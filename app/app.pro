@@ -184,6 +184,8 @@ SOURCES += \
     cli/startstream.cpp \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
+    settings/streamingprofile.cpp \
+    settings/streamingprofilemanager.cpp \
     settings/streamingpreferences.cpp \
     streaming/input/abstouch.cpp \
     streaming/input/gamepad.cpp \
@@ -226,6 +228,8 @@ HEADERS += \
     cli/listapps.h \
     cli/quitstream.h \
     cli/startstream.h \
+    settings/streamingprofile.h \
+    settings/streamingprofilemanager.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/session.h \

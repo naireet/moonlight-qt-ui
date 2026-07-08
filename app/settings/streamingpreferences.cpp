@@ -39,6 +39,7 @@
 #define SER_UIDISPLAYMODE "uidisplaymode"
 #define SER_RICHPRESENCE "richpresence"
 #define SER_GAMEPADMOUSE "gamepadmouse"
+#define SER_GAMEPADGUIDECHORD "gamepadguidechord"
 #define SER_DEFAULTVER "defaultver"
 #define SER_PACKETSIZE "packetsize"
 #define SER_DETECTNETBLOCKING "detectnetblocking"
@@ -46,6 +47,8 @@
 #define SER_STATSOVERLAYLITE "statsoverlaylite"
 #define SER_STATSOVERLAYFONT "statsoverlayfont"
 #define SER_STATSOVERLAYCOLOR "statsoverlaycolor"
+#define SER_APPGRIDTILESCALE "appgridtilescale"
+#define SER_APPGRIDTILEGAP "appgridtilegap"
 #define SER_SWAPMOUSEBUTTONS "swapmousebuttons"
 #define SER_MUTEONFOCUSLOSS "muteonfocusloss"
 #define SER_BACKGROUNDGAMEPAD "backgroundgamepad"
@@ -54,6 +57,9 @@
 #define SER_CAPTURESYSKEYS "capturesyskeys"
 #define SER_KEEPAWAKE "keepawake"
 #define SER_LANGUAGE "language"
+#define SER_ACCENTCOLOR "accentcolor"
+#define SER_BACKGROUNDSTYLE "backgroundstyle"
+#define SER_BACKGROUNDMOTIONTIER "backgroundmotiontier"
 
 #define CURRENT_DEFAULT_VER 2
 
@@ -144,6 +150,7 @@ void StreamingPreferences::reload()
     configurationWarnings = settings.value(SER_CONFWARNINGS, true).toBool();
     richPresence = settings.value(SER_RICHPRESENCE, true).toBool();
     gamepadMouse = settings.value(SER_GAMEPADMOUSE, true).toBool();
+    gamepadGuideButtonChord = settings.value(SER_GAMEPADGUIDECHORD, false).toBool();
     detectNetworkBlocking = settings.value(SER_DETECTNETBLOCKING, true).toBool();
     showPerformanceOverlay = settings.value(SER_SHOWPERFOVERLAY, false).toBool();
     statsOverlayLite = settings.value(SER_STATSOVERLAYLITE, false).toBool();
@@ -151,6 +158,8 @@ void StreamingPreferences::reload()
                                                       static_cast<int>(StatsOverlayFont::SOF_MODESEVEN)).toInt());
     statsOverlayColor = static_cast<StatsOverlayColor>(settings.value(SER_STATSOVERLAYCOLOR,
                                                         static_cast<int>(StatsOverlayColor::SOC_YELLOW)).toInt());
+    appGridTileScale = qBound(60, settings.value(SER_APPGRIDTILESCALE, 100).toInt(), 100);
+    appGridTileGap = qBound(4, settings.value(SER_APPGRIDTILEGAP, 10).toInt(), 24);
     packetSize = settings.value(SER_PACKETSIZE, 0).toInt();
     swapMouseButtons = settings.value(SER_SWAPMOUSEBUTTONS, false).toBool();
     muteOnFocusLoss = settings.value(SER_MUTEONFOCUSLOSS, false).toBool();
@@ -176,6 +185,11 @@ void StreamingPreferences::reload()
                                                                                                                  : UIDisplayMode::UI_MAXIMIZED)).toInt());
     language = static_cast<Language>(settings.value(SER_LANGUAGE,
                                                     static_cast<int>(Language::LANG_AUTO)).toInt());
+    accentColor = settings.value(SER_ACCENTCOLOR, "#66CCFF").toString();
+    backgroundStyle = static_cast<BackgroundStyle>(settings.value(SER_BACKGROUNDSTYLE,
+                                                    static_cast<int>(BackgroundStyle::BackgroundGradient)).toInt());
+    backgroundMotionTier = static_cast<BackgroundMotionTier>(settings.value(SER_BACKGROUNDMOTIONTIER,
+                                                    static_cast<int>(BackgroundMotionTier::MotionStatic)).toInt());
 
 
     // Perform default settings updates as required based on last default version
@@ -347,12 +361,15 @@ void StreamingPreferences::save()
     settings.setValue(SER_CONFWARNINGS, configurationWarnings);
     settings.setValue(SER_RICHPRESENCE, richPresence);
     settings.setValue(SER_GAMEPADMOUSE, gamepadMouse);
+    settings.setValue(SER_GAMEPADGUIDECHORD, gamepadGuideButtonChord);
     settings.setValue(SER_PACKETSIZE, packetSize);
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
     settings.setValue(SER_STATSOVERLAYLITE, statsOverlayLite);
     settings.setValue(SER_STATSOVERLAYFONT, static_cast<int>(statsOverlayFont));
     settings.setValue(SER_STATSOVERLAYCOLOR, static_cast<int>(statsOverlayColor));
+    settings.setValue(SER_APPGRIDTILESCALE, appGridTileScale);
+    settings.setValue(SER_APPGRIDTILEGAP, appGridTileGap);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(SER_HDR, enableHdr);
     settings.setValue(SER_YUV444, enableYUV444);
@@ -369,6 +386,9 @@ void StreamingPreferences::save()
     settings.setValue(SER_SWAPFACEBUTTONS, swapFaceButtons);
     settings.setValue(SER_CAPTURESYSKEYS, captureSysKeysMode);
     settings.setValue(SER_KEEPAWAKE, keepAwake);
+    settings.setValue(SER_ACCENTCOLOR, accentColor);
+    settings.setValue(SER_BACKGROUNDSTYLE, static_cast<int>(backgroundStyle));
+    settings.setValue(SER_BACKGROUNDMOTIONTIER, static_cast<int>(backgroundMotionTier));
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)

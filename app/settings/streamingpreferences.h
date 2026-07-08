@@ -124,6 +124,22 @@ public:
     };
     Q_ENUM(StatsOverlayColor)
 
+    enum BackgroundStyle
+    {
+        BackgroundSolid,
+        BackgroundGradient,
+        BackgroundAppArt
+    };
+    Q_ENUM(BackgroundStyle)
+
+    enum BackgroundMotionTier
+    {
+        MotionOff,
+        MotionStatic,
+        MotionSubtle
+    };
+    Q_ENUM(BackgroundMotionTier)
+
     Q_PROPERTY(int width MEMBER width NOTIFY displayModeChanged)
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
@@ -143,11 +159,14 @@ public:
     Q_PROPERTY(bool configurationWarnings MEMBER configurationWarnings NOTIFY configurationWarningsChanged)
     Q_PROPERTY(bool richPresence MEMBER richPresence NOTIFY richPresenceChanged)
     Q_PROPERTY(bool gamepadMouse MEMBER gamepadMouse NOTIFY gamepadMouseChanged)
+    Q_PROPERTY(bool gamepadGuideButtonChord MEMBER gamepadGuideButtonChord NOTIFY gamepadGuideButtonChordChanged)
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
     Q_PROPERTY(bool statsOverlayLite MEMBER statsOverlayLite NOTIFY statsOverlayLiteChanged)
     Q_PROPERTY(StatsOverlayFont statsOverlayFont MEMBER statsOverlayFont NOTIFY statsOverlayFontChanged)
     Q_PROPERTY(StatsOverlayColor statsOverlayColor MEMBER statsOverlayColor NOTIFY statsOverlayColorChanged)
+    Q_PROPERTY(int appGridTileScale MEMBER appGridTileScale NOTIFY appGridTileScaleChanged)
+    Q_PROPERTY(int appGridTileGap MEMBER appGridTileGap NOTIFY appGridTileGapChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
@@ -164,6 +183,9 @@ public:
     Q_PROPERTY(bool keepAwake MEMBER keepAwake NOTIFY keepAwakeChanged)
     Q_PROPERTY(CaptureSysKeysMode captureSysKeysMode MEMBER captureSysKeysMode NOTIFY captureSysKeysModeChanged)
     Q_PROPERTY(Language language MEMBER language NOTIFY languageChanged);
+    Q_PROPERTY(QString accentColor MEMBER accentColor NOTIFY accentColorChanged)
+    Q_PROPERTY(BackgroundStyle backgroundStyle MEMBER backgroundStyle NOTIFY backgroundStyleChanged)
+    Q_PROPERTY(BackgroundMotionTier backgroundMotionTier MEMBER backgroundMotionTier NOTIFY backgroundMotionTierChanged)
 
     Q_INVOKABLE bool retranslate();
 
@@ -187,11 +209,14 @@ public:
     bool configurationWarnings;
     bool richPresence;
     bool gamepadMouse;
+    bool gamepadGuideButtonChord;
     bool detectNetworkBlocking;
     bool showPerformanceOverlay;
     bool statsOverlayLite;
     StatsOverlayFont statsOverlayFont;
     StatsOverlayColor statsOverlayColor;
+    int appGridTileScale;
+    int appGridTileGap;
     bool swapMouseButtons;
     bool muteOnFocusLoss;
     bool backgroundGamepad;
@@ -209,6 +234,9 @@ public:
     UIDisplayMode uiDisplayMode;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
+    QString accentColor;
+    BackgroundStyle backgroundStyle;
+    BackgroundMotionTier backgroundMotionTier;
 
 signals:
     void displayModeChanged();
@@ -236,11 +264,14 @@ signals:
     void configurationWarningsChanged();
     void richPresenceChanged();
     void gamepadMouseChanged();
+    void gamepadGuideButtonChordChanged();
     void detectNetworkBlockingChanged();
     void showPerformanceOverlayChanged();
     void statsOverlayLiteChanged();
     void statsOverlayFontChanged();
     void statsOverlayColorChanged();
+    void appGridTileScaleChanged();
+    void appGridTileGapChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();
@@ -249,6 +280,9 @@ signals:
     void captureSysKeysModeChanged();
     void keepAwakeChanged();
     void languageChanged();
+    void accentColorChanged();
+    void backgroundStyleChanged();
+    void backgroundMotionTierChanged();
 
 private:
     explicit StreamingPreferences(QQmlEngine *qmlEngine);
@@ -257,4 +291,3 @@ private:
 
     QQmlEngine* m_QmlEngine;
 };
-

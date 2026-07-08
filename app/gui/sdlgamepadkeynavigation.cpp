@@ -193,6 +193,12 @@ void SdlGamepadKeyNavigation::onPollingTimerFired()
                 // by the control in focus.
                 sendKey(type, Qt::Key_Hangup);
                 break;
+            case SDL_CONTROLLER_BUTTON_BACK:
+                // Back is unbound by default. Use it as an unambiguous
+                // "open context menu" button (Start always means Settings,
+                // this always means Options on the focused tile).
+                sendKey(type, Qt::Key_Menu);
+                break;
             default:
                 break;
             }
