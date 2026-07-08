@@ -22,15 +22,19 @@ ApplicationWindow {
     width: 1280
     height: 600
 
+    // Global dark theme. Every stock Qt Quick Controls surface (toolbar,
+    // settings page background, checkboxes, comboboxes, sliders, dialogs)
+    // derives its palette from these Material.* attached properties, so
+    // this is the single override point for the whole app's chrome instead
+    // of the previous per-page ad-hoc gray hack.
+    Material.theme: Material.Dark
+    Material.accent: StreamingPreferences.accentColor
+    Material.primary: "#12141c"
+    Material.background: "#0d0e14"
+    Material.foreground: "#eef0f6"
+
     // This function runs prior to creation of the initial StackView item
     function doEarlyInit() {
-        // Override the background color to Material 2 colors for Qt 6.5+
-        // in order to improve contrast between GFE's placeholder box art
-        // and the background of the app grid.
-        if (SystemProperties.usesMaterial3Theme) {
-            Material.background = "#303030"
-        }
-
         SdlGamepadKeyNavigation.enable()
     }
 
