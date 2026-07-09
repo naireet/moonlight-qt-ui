@@ -11,6 +11,16 @@ class StreamingPreferences : public QObject
 public:
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
+    // Creates a standalone StreamingPreferences instance that is NOT the
+    // shared global singleton returned by get() above -- its constructor
+    // is otherwise private specifically to enforce the singleton pattern
+    // for normal use. Used to build a temporary, throwaway preferences
+    // object (e.g. applying a per-app pinned streaming profile to a
+    // single launch via AppModel::createSessionForApp()) without ever
+    // touching or persisting the user's actual global settings. The
+    // caller owns the returned object and is responsible for deleting it.
+    static StreamingPreferences* createStandalone(QQmlEngine *qmlEngine = nullptr);
+
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 

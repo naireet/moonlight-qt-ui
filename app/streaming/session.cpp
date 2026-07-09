@@ -547,8 +547,9 @@ bool Session::populateDecoderProperties(SDL_Window* window)
     return true;
 }
 
-Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
+Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences, bool ownsPreferences)
     : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
+      m_OwnsPreferences(preferences != nullptr && ownsPreferences),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
       m_Computer(computer),
       m_App(app),
@@ -577,6 +578,10 @@ Session::~Session()
     // Use Session::exec() or DeferredSessionCleanupTask instead.
 
     SDL_DestroyMutex(m_DecoderLock);
+
+    if (m_OwnsPreferences) {
+        delete m_Preferences;
+    }
 }
 
 bool Session::initialize(QQuickWindow* qtWindow)

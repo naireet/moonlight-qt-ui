@@ -74,6 +74,11 @@ StreamingPreferences::StreamingPreferences(QQmlEngine *qmlEngine)
     reload();
 }
 
+StreamingPreferences* StreamingPreferences::createStandalone(QQmlEngine *qmlEngine)
+{
+    return new StreamingPreferences(qmlEngine);
+}
+
 StreamingPreferences* StreamingPreferences::get(QQmlEngine *qmlEngine)
 {
     {

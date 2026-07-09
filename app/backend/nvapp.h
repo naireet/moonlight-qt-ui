@@ -17,7 +17,8 @@ public:
                 hidden == other.hidden &&
                 directLaunch == other.directLaunch &&
                 favorite == other.favorite &&
-                favoriteOrder == other.favoriteOrder;
+                favoriteOrder == other.favoriteOrder &&
+                preferredProfileId == other.preferredProfileId;
     }
 
     bool operator!=(const NvApp& other) const
@@ -43,6 +44,14 @@ public:
     bool directLaunch = false;
     bool favorite = false;
     int favoriteOrder = -1;
+
+    // Empty string means "use whichever streaming profile is currently the
+    // globally-active one" (the existing/default behavior). A non-empty
+    // value pins this app to always launch with that specific
+    // StreamingProfile's settings, regardless of the global active
+    // profile -- see StreamingProfileManager::applyProfileTo() and
+    // AppModel::createSessionForApp().
+    QString preferredProfileId;
 };
 
 Q_DECLARE_METATYPE(NvApp)

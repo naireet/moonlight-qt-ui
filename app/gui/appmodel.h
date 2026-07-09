@@ -21,6 +21,7 @@ class AppModel : public QAbstractListModel
         FavoriteRole,
         FavoriteOrderRole,
         AppCollectorGameRole,
+        PreferredProfileIdRole,
     };
 
 public:
@@ -44,6 +45,8 @@ public:
     Q_INVOKABLE void setAppDirectLaunch(int appIndex, bool directLaunch);
 
     Q_INVOKABLE void setAppFavorite(int appIndex, bool favorite);
+
+    Q_INVOKABLE void setAppPreferredProfile(int appIndex, const QString& profileId);
 
     Q_INVOKABLE void moveFavorite(int appIndex, int direction);
 

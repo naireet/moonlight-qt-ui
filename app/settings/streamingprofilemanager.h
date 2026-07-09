@@ -29,6 +29,17 @@ public:
     Q_INVOKABLE bool deleteProfile(const QString& profileId);
     Q_INVOKABLE void resetProfileToDefaults(const QString& profileId);
 
+    // Applies the given profile's settings directly onto an arbitrary
+    // StreamingPreferences instance (e.g. a temporary per-launch object),
+    // WITHOUT calling save() or emitting any of the preference change
+    // signals that setActiveProfile()/applyProfileToPreferences() do --
+    // this must never disturb the actual globally-active profile or its
+    // persisted state. Used to let a specific app launch with a pinned
+    // profile's settings while leaving "Active Profile" in Settings
+    // completely unchanged. Returns false if profileId doesn't match any
+    // known profile (e.g. it was since deleted), leaving prefs untouched.
+    bool applyProfileTo(const QString& profileId, StreamingPreferences* prefs) const;
+
 signals:
     void activeProfileChanged();
     void profileListChanged();

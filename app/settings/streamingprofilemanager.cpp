@@ -425,6 +425,17 @@ int StreamingProfileManager::findProfileIndex(const QString& profileId) const
     return -1;
 }
 
+bool StreamingProfileManager::applyProfileTo(const QString& profileId, StreamingPreferences* prefs) const
+{
+    const int profileIndex = findProfileIndex(profileId);
+    if (profileIndex < 0) {
+        return false;
+    }
+
+    m_Profiles.at(profileIndex).applyTo(prefs);
+    return true;
+}
+
 bool StreamingProfileManager::isProfileNameAvailable(const QString& name, const QString& excludedProfileId) const
 {
     for (const StreamingProfile& profile : m_Profiles) {
