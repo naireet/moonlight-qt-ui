@@ -18,6 +18,18 @@ ApplicationWindow {
     // a retranslate() because AppView breaks for some reason.
     property bool clearOnBack: false
 
+    // Set by StreamSegue/QuitSegue/CLI segues while a stream is starting,
+    // active, or being quit, to force-hide the header regardless of which
+    // page it is layered over. This must be a plain property (not an
+    // imperative "toolBar.visible = true/false" from those segue files) --
+    // assigning directly to a property that already has a binding
+    // expression (like the header's `visible:` binding below) permanently
+    // destroys that binding in QML, which previously caused the stock
+    // header to get stuck permanently visible on every page after quitting
+    // a single stream, since the old code restored it with a flat
+    // "toolBar.visible = true" instead of restoring the binding.
+    property bool streamActive: false
+
     id: window
     width: 1280
     height: 600
@@ -274,7 +286,7 @@ ApplicationWindow {
         // file) -- do NOT also bind height/anchors margins to visibility,
         // that fights the window's internal header layout and causes a
         // relayout feedback loop that pegs the UI thread.
-        visible: !(stackView.currentItem instanceof PcView) && !(stackView.currentItem instanceof AppView) && !(stackView.currentItem instanceof AppCoverflowView)
+        visible: !window.streamActive && !(stackView.currentItem instanceof PcView) && !(stackView.currentItem instanceof AppView) && !(stackView.currentItem instanceof AppCoverflowView)
         height: 60
         anchors.topMargin: 5
         anchors.bottomMargin: 5
