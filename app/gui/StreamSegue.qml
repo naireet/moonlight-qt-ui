@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.15
 import QtQuick.Controls 2.2
 import QtQuick.Window 2.2
 
@@ -232,23 +232,86 @@ Item {
         sourceComponent: Item {}
     }
 
-    Row {
+    Column {
         anchors.centerIn: parent
-        spacing: 5
+        spacing: 14
 
-        BusyIndicator {
+        // Continuously-spinning ring, matching the mockup's `.load-spin`
+        // spec: a 52px ring built from a conic gradient sweeping from
+        // transparent to the app's text color, masked down to a ring via a
+        // transparent center -- drawn once into a Canvas (cheap, since the
+        // sweep itself never changes) then spun via RotationAnimation on
+        // the wrapping Item's rotation, the exact same "draw once, rotate
+        // the Item" technique already used for the smaller 26px half-moon
+        // wordmark spinner on Host Select/App Grid (PcView.qml's moonIcon),
+        // just bigger (52px vs 26px) and faster (1400ms vs 3500ms) per the
+        // mockup's `animation: spin 1.4s linear infinite`. Replaces the
+        // stock Material BusyIndicator, which rendered as a plain spinning
+        // dashed circle with no visual relation to the rest of the redesign
+        // and was only ever shown after a 100ms delay via spinnerTimer.
+        Item {
             id: stageSpinner
-            running: visible
+            width: 52
+            height: 52
             visible: false
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            Canvas {
+                id: spinnerCanvas
+                anchors.fill: parent
+
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.reset()
+
+                    var cx = width / 2
+                    var cy = height / 2
+                    var outerRadius = width / 2
+                    var innerRadius = 15
+                    var ringRadius = (outerRadius + innerRadius) / 2
+
+                    var gradient = ctx.createConicalGradient(cx, cy, 0)
+                    gradient.addColorStop(0.0, "transparent")
+                    gradient.addColorStop(1.0, "#eef0f6")
+
+                    ctx.lineWidth = outerRadius - innerRadius
+                    ctx.strokeStyle = gradient
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2)
+                    ctx.stroke()
+                }
+            }
+
+            RotationAnimation on rotation {
+                running: stageSpinner.visible
+                loops: Animation.Infinite
+                from: 0
+                to: 360
+                duration: 1400
+            }
+        }
+
+        // Big static title + smaller dim stage subtitle, matching the
+        // mockup's two-line `.loading .big` / `.loading .sub` layout,
+        // replacing the old single combined "Starting GameName..." label.
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: stageLabel.visible
+            text: qsTr("Initializing Moonlight…")
+            color: "#eef0f6"
+            font.pointSize: 20
+            horizontalAlignment: Text.AlignHCenter
         }
 
         Label {
             id: stageLabel
-            height: stageSpinner.height
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(implicitWidth, 500)
             text: stageText
-            font.pointSize: 20
+            color: "#9aa0b0"
+            font.pointSize: 13
+            horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-
             wrapMode: Text.Wrap
         }
     }
