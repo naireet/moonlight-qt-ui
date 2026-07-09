@@ -144,7 +144,7 @@ FocusScope {
             stackView.pop(existingItem)
         }
         else {
-            stackView.push("qrc:/gui/SettingsView.qml")
+            stackView.push("qrc:/gui/SettingsView.qml", {"hostName": pcList.currentItem ? pcList.currentItem.pcName : ""})
         }
     }
 
@@ -161,7 +161,7 @@ FocusScope {
             existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
         }
         else {
-            stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6})
+            stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": pcList.currentItem ? pcList.currentItem.pcName : ""})
         }
     }
 
@@ -605,14 +605,18 @@ FocusScope {
                 }
 
                 // Generic computer glyph so the node isn't a bare gradient
-                // circle when there's no real per-host art to show. Hidden
-                // whenever a status glyph (offline/unpaired/unknown) already
-                // occupies this same centered spot.
+                // circle -- always present as a base layer (per parent
+                // session feedback) rather than only when a host is
+                // online+paired, with the offline/unpaired/unknown status
+                // glyphs below layered on top of it. Dimmed (rather than
+                // hidden) whenever one of those overlays is showing so the
+                // overlay stays legible instead of visually fighting with
+                // a full-opacity icon underneath it.
                 Image {
                     anchors.centerIn: parent
-                    visible: !model.statusUnknown && model.online && model.paired
+                    visible: true
+                    opacity: (model.statusUnknown || !model.online || !model.paired) ? 0.35 : 0.9
                     source: "qrc:/res/desktop_windows-48px.svg"
-                    opacity: 0.9
                     sourceSize {
                         width: pcDelegate.isSelected ? 64 : 40
                         height: pcDelegate.isSelected ? 64 : 40
