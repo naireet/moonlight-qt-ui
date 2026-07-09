@@ -165,6 +165,38 @@ FocusScope {
         }
     }
 
+    // Navigates to the App Grid/Coverflow view for a given host.
+    //
+    // Qt.createComponent() does NOT guarantee the component is Ready by the
+    // very next line -- for a component as large as AppView.qml (aurora
+    // background, pill header, themed context menu, etc.) the engine can
+    // still be compiling it asynchronously on the first load in a session,
+    // which made component.createObject() silently return null and made
+    // stackView.push(null) a no-op ("StackView: push: nothing to push"),
+    // i.e. clicking a host appeared to do nothing. Handle both the
+    // already-ready (common, cached) case and the not-yet-ready (first
+    // load) case explicitly instead of assuming synchronous completion.
+    function pushAppView(properties) {
+        var component = Qt.createComponent("AppView.qml")
+
+        function finishPush() {
+            if (component.status === Component.Ready) {
+                var appView = component.createObject(stackView, properties)
+                stackView.push(appView)
+            }
+            else if (component.status === Component.Error) {
+                console.log("Failed to load AppView.qml: " + component.errorString())
+            }
+        }
+
+        if (component.status === Component.Ready || component.status === Component.Error) {
+            finishPush()
+        }
+        else {
+            component.statusChanged.connect(finishPush)
+        }
+    }
+
     // ===== Aurora background =====
     // Three softly-blurred, slowly-drifting radial-gradient blobs (violet,
     // teal, magenta) layered over a near-black base -- this is the visual
@@ -474,9 +506,7 @@ FocusScope {
                     }
                     else if (model.paired) {
                         // go to game view
-                        var component = Qt.createComponent("AppView.qml")
-                        var appView = component.createObject(stackView, {"computerIndex": index, "objectName": model.name})
-                        stackView.push(appView)
+                        pushAppView({"computerIndex": index, "objectName": model.name})
                     }
                     else {
                         var pin = computerModel.generatePinString()
@@ -572,6 +602,21 @@ FocusScope {
                     border.width: 2
                     border.color: "#ffffff"
                     visible: pcDelegate.isSelected
+                }
+
+                // Generic computer glyph so the node isn't a bare gradient
+                // circle when there's no real per-host art to show. Hidden
+                // whenever a status glyph (offline/unpaired/unknown) already
+                // occupies this same centered spot.
+                Image {
+                    anchors.centerIn: parent
+                    visible: !model.statusUnknown && model.online && model.paired
+                    source: "qrc:/res/desktop_windows-48px.svg"
+                    opacity: 0.9
+                    sourceSize {
+                        width: pcDelegate.isSelected ? 64 : 40
+                        height: pcDelegate.isSelected ? 64 : 40
+                    }
                 }
 
                 // Dashed ring for side nodes, built from rotated segments
@@ -984,9 +1029,7 @@ FocusScope {
 
                         onClicked: {
                             pcContextMenu.close()
-                            var component = Qt.createComponent("AppView.qml")
-                            var appView = component.createObject(stackView, {"computerIndex": pcView.hostActionsIndex, "objectName": pcView.hostActionsName, "showHiddenGames": true})
-                            stackView.push(appView)
+                            pushAppView({"computerIndex": pcView.hostActionsIndex, "objectName": pcView.hostActionsName, "showHiddenGames": true})
                         }
                     }
 
