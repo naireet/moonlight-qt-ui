@@ -788,6 +788,28 @@ Item {
                     }
                 }
             }
+
+            // NavigableMenu only moves focus INTO itself on open (see
+            // NavigableMenu.qml's onOpened) -- it never hands focus back
+            // to whatever had it before, whether the menu is dismissed by
+            // selecting an item, pressing Escape, or clicking outside.
+            // Without this, closing a tile's context menu leaves keyboard/
+            // gamepad focus nowhere, so D-pad input silently stops
+            // navigating the list until the view is freshly re-entered.
+            // This is very likely the root cause of the reported
+            // "controller worked for a few seconds, then stopped" bug:
+            // opening a context menu even once (right-click, press-and-
+            // hold, or the Menu key) would permanently strand focus for
+            // the rest of that visit to Coverflow. Mirrors the equivalent
+            // fix already in place for PcView.qml's host context menu
+            // (pcContextMenuLoader.item.onClosed -> pcList.forceActiveFocus()).
+            Connections {
+                target: appContextMenuLoader.item
+
+                function onClosed() {
+                    coverList.forceActiveFocus()
+                }
+            }
         }
     }
 

@@ -739,6 +739,24 @@ CenteredGridView {
                     ToolTip.visible: hovered
                 }
             }
+
+            // NavigableMenu only moves focus INTO itself on open (see
+            // NavigableMenu.qml's onOpened) -- it never hands focus back
+            // to whatever had it before, whether the menu is dismissed by
+            // selecting an item, pressing Escape, or clicking outside.
+            // Without this, closing a tile's context menu leaves keyboard/
+            // gamepad focus nowhere, so D-pad input silently stops
+            // navigating the grid until the view is freshly re-entered.
+            // Mirrors the equivalent fix already in place for PcView.qml's
+            // host context menu (pcContextMenuLoader.item.onClosed ->
+            // pcList.forceActiveFocus()) and AppCoverflowView.qml's list.
+            Connections {
+                target: appContextMenuLoader.item
+
+                function onClosed() {
+                    appGrid.forceActiveFocus()
+                }
+            }
         }
     }
 
