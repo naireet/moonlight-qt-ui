@@ -365,7 +365,8 @@ Item {
 
             RoundButton {
                 id: gridToggleButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/ic_grid_view.svg"
 
                 ToolTip.text: qsTr("Switch to Grid View")
@@ -376,6 +377,7 @@ Item {
                 Material.background: Qt.rgba(1, 1, 1, 0.06)
 
                 onClicked: {
+                    StreamingPreferences.appViewCoverflow = false
                     var component = Qt.createComponent("AppView.qml")
                     var gridView = component.createObject(stackView, {
                                                                "objectName": coverflowView.objectName,
@@ -385,11 +387,18 @@ Item {
                                                            })
                     stackView.replace(coverflowView, gridView, StackView.Immediate)
                 }
+
+                Keys.onRightPressed: coverflowProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: coverflowProfileButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 implicitHeight: 36
                 flat: true
                 text: StreamingProfileManager.activeProfileName
@@ -418,11 +427,19 @@ Item {
                         stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": coverflowView.objectName})
                     }
                 }
+
+                Keys.onLeftPressed: gridToggleButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: coverflowSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: coverflowSettingsButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/settings.svg"
 
                 ToolTip.text: qsTr("Settings")
@@ -444,11 +461,19 @@ Item {
                         stackView.push("qrc:/gui/SettingsView.qml", {"hostName": coverflowView.objectName})
                     }
                 }
+
+                Keys.onLeftPressed: coverflowProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: coverflowBackButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: coverflowBackButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/arrow_left.svg"
 
                 ToolTip.text: qsTr("Back to Host Select")
@@ -459,6 +484,12 @@ Item {
                 Material.background: Qt.rgba(1, 1, 1, 0.06)
 
                 onClicked: stackView.pop()
+
+                Keys.onLeftPressed: coverflowSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: coverList.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
         }
     }
@@ -490,6 +521,16 @@ Item {
             if (coverList.currentIndex < coverList.count - 1) {
                 coverList.incrementCurrentIndex()
             }
+            event.accepted = true
+        }
+
+        // Coverflow is a single horizontal strip -- there's no "top row"
+        // concept, so Up always escapes focus to the floating button row
+        // (view toggle / profile / settings / back), mirroring AppView's
+        // grid behavior and making these buttons reachable via
+        // controller/keyboard.
+        Keys.onUpPressed: {
+            gridToggleButton.forceActiveFocus(Qt.TabFocus)
             event.accepted = true
         }
 
