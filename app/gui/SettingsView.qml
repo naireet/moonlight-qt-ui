@@ -48,6 +48,21 @@ Item {
         return sectionStack.itemAt(currentSectionIndex)
     }
 
+    // Maps a drawer section index to that section's first focusable
+    // control, so Right-on-a-drawer-row and the drawer's own Tab chain can
+    // jump straight into that section's content (see sectionRepeater).
+    function firstControlForSection(index) {
+        switch (index) {
+        case 0: return resolutionComboBox
+        case 1: return audioComboBox
+        case 2: return optimizeGameSettingsCheck
+        case 3: return absoluteMouseCheck
+        case 4: return languageComboBox
+        case 5: return backgroundStyleComboBox
+        default: return null
+        }
+    }
+
     function isChildOfFlickable(item, flick) {
         while (item) {
             if (item.parent === flick.contentItem) {
@@ -355,6 +370,7 @@ Item {
                     spacing: 6
 
                     Repeater {
+                        id: sectionRepeater
                         model: settingsSectionTitles
 
                         delegate: Button {
@@ -364,8 +380,47 @@ Item {
                             flat: true
                             hoverEnabled: true
                             focusPolicy: Qt.StrongFocus
+                            activeFocusOnTab: true
                             text: modelData
                             onClicked: settingsPage.currentSectionIndex = index
+
+                            // Gamepad D-pad Up/Down are remapped to
+                            // Shift+Tab/Tab while in Settings (see
+                            // SdlGamepadKeyNavigation's UI nav mode, enabled
+                            // in StackView.onActivated below), so the
+                            // section drawer needs an explicit Tab/Backtab
+                            // chain among its own rows -- otherwise a
+                            // controller/keyboard user can move through the
+                            // active section's content but can never Tab
+                            // back into the drawer to pick a different one.
+                            KeyNavigation.tab: index + 1 < sectionRepeater.count ?
+                                                   sectionRepeater.itemAt(index + 1) :
+                                                   settingsPage.firstControlForSection(index)
+                            KeyNavigation.backtab: index > 0 ? sectionRepeater.itemAt(index - 1) : null
+
+                            // Right (not remapped in UI nav mode, so this
+                            // also works verbatim on a real D-pad) drills
+                            // straight into the now-selected section's
+                            // first control as a quicker alternative to Tab.
+                            Keys.onRightPressed: {
+                                settingsPage.currentSectionIndex = index
+                                var firstControl = settingsPage.firstControlForSection(index)
+                                if (firstControl) {
+                                    firstControl.forceActiveFocus(Qt.TabFocus)
+                                }
+                                event.accepted = true
+                            }
+
+                            Keys.onReturnPressed: clicked()
+                            Keys.onEnterPressed: clicked()
+
+                            // Keep the visible section in sync no matter how
+                            // this row got focus (Tab/Backtab, Right, click).
+                            onActiveFocusChanged: {
+                                if (activeFocus) {
+                                    settingsPage.currentSectionIndex = index
+                                }
+                            }
 
                             background: Rectangle {
                                 radius: 12
@@ -553,6 +608,11 @@ Item {
                         }
 
                         id: resolutionComboBox
+                        // Lets a controller/keyboard user Tab back (D-pad
+                        // Up in Settings' UI nav mode) into the section
+                        // drawer instead of getting stuck cycling only
+                        // through this section's own controls.
+                        KeyNavigation.backtab: sectionRepeater.itemAt(0)
                         maximumWidth: 180
                         textRole: "text"
                         model: ListModel {
@@ -1259,6 +1319,7 @@ Item {
                     }
 
                     id: audioComboBox
+                    KeyNavigation.backtab: sectionRepeater.itemAt(1)
                     maximumWidth: 260
                     textRole: "text"
                     model: ListModel {
@@ -1347,6 +1408,7 @@ Item {
 
                 ToggleSwitch {
                     id: optimizeGameSettingsCheck
+                    KeyNavigation.backtab: sectionRepeater.itemAt(2)
                     width: parent.width
                     divider: true
                     text: qsTr("Optimize game settings for streaming")
@@ -1723,6 +1785,7 @@ Item {
 
                 ToggleSwitch {
                     id: absoluteMouseCheck
+                    KeyNavigation.backtab: sectionRepeater.itemAt(3)
                     hoverEnabled: true
                     width: parent.width
                     divider: true
@@ -2012,6 +2075,7 @@ Item {
                     }
 
                     id: languageComboBox
+                    KeyNavigation.backtab: sectionRepeater.itemAt(4)
                     maximumWidth: 260
                     textRole: "text"
                     model: ListModel {
@@ -2390,6 +2454,7 @@ Item {
 
                 AutoResizingComboBox {
                     id: backgroundStyleComboBox
+                    KeyNavigation.backtab: sectionRepeater.itemAt(5)
                     maximumWidth: 220
                     textRole: "text"
                     Component.onCompleted: {

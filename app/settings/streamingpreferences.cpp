@@ -49,6 +49,7 @@
 #define SER_STATSOVERLAYCOLOR "statsoverlaycolor"
 #define SER_APPGRIDTILESCALE "appgridtilescale"
 #define SER_APPGRIDTILEGAP "appgridtilegap"
+#define SER_APPVIEWCOVERFLOW "appviewcoverflow"
 #define SER_SWAPMOUSEBUTTONS "swapmousebuttons"
 #define SER_MUTEONFOCUSLOSS "muteonfocusloss"
 #define SER_BACKGROUNDGAMEPAD "backgroundgamepad"
@@ -160,6 +161,10 @@ void StreamingPreferences::reload()
                                                         static_cast<int>(StatsOverlayColor::SOC_YELLOW)).toInt());
     appGridTileScale = qBound(60, settings.value(SER_APPGRIDTILESCALE, 100).toInt(), 100);
     appGridTileGap = qBound(4, settings.value(SER_APPGRIDTILEGAP, 10).toInt(), 24);
+    // Remembers whether the user was last browsing apps in Coverflow rather
+    // than the default Grid view, so re-entering a host's app list doesn't
+    // always reset back to Grid.
+    appViewCoverflow = settings.value(SER_APPVIEWCOVERFLOW, false).toBool();
     packetSize = settings.value(SER_PACKETSIZE, 0).toInt();
     swapMouseButtons = settings.value(SER_SWAPMOUSEBUTTONS, false).toBool();
     muteOnFocusLoss = settings.value(SER_MUTEONFOCUSLOSS, false).toBool();
@@ -375,6 +380,7 @@ void StreamingPreferences::save()
     settings.setValue(SER_STATSOVERLAYCOLOR, static_cast<int>(statsOverlayColor));
     settings.setValue(SER_APPGRIDTILESCALE, appGridTileScale);
     settings.setValue(SER_APPGRIDTILEGAP, appGridTileGap);
+    settings.setValue(SER_APPVIEWCOVERFLOW, appViewCoverflow);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(SER_HDR, enableHdr);
     settings.setValue(SER_YUV444, enableYUV444);

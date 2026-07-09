@@ -177,7 +177,8 @@ FocusScope {
     // already-ready (common, cached) case and the not-yet-ready (first
     // load) case explicitly instead of assuming synchronous completion.
     function pushAppView(properties) {
-        var component = Qt.createComponent("AppView.qml")
+        var componentUrl = StreamingPreferences.appViewCoverflow ? "AppCoverflowView.qml" : "AppView.qml"
+        var component = Qt.createComponent(componentUrl)
 
         function finishPush() {
             if (component.status === Component.Ready) {
@@ -185,7 +186,7 @@ FocusScope {
                 stackView.push(appView)
             }
             else if (component.status === Component.Error) {
-                console.log("Failed to load AppView.qml: " + component.errorString())
+                console.log("Failed to load " + componentUrl + ": " + component.errorString())
             }
         }
 
@@ -437,9 +438,10 @@ FocusScope {
 
         Keys.onUpPressed: {
             // There's no vertical dimension in the carousel -- Up escapes
-            // focus back up to the toolbar, mirroring the old grid's
-            // top-of-list behavior.
-            nextItemInFocusChain(false).forceActiveFocus(Qt.TabFocus)
+            // focus up to the floating button row (profile chip + gear
+            // icon) so a controller/keyboard-only user can actually reach
+            // Settings without a mouse.
+            pcProfileButton.forceActiveFocus(Qt.TabFocus)
         }
 
         Keys.onReturnPressed: {
@@ -1124,7 +1126,8 @@ FocusScope {
         anchors.margins: 14
         z: 10
 
-        focusPolicy: Qt.NoFocus
+        focusPolicy: Qt.TabFocus
+        activeFocusOnTab: true
         icon.source: "qrc:/res/settings.svg"
 
         ToolTip.text: qsTr("Settings")
@@ -1135,6 +1138,12 @@ FocusScope {
         Material.background: Qt.rgba(1, 1, 1, 0.09)
 
         onClicked: openMoonlightSettings()
+
+        Keys.onLeftPressed: pcProfileButton.forceActiveFocus(Qt.TabFocus)
+        Keys.onDownPressed: pcList.forceActiveFocus(Qt.TabFocus)
+        Keys.onEscapePressed: pcList.forceActiveFocus(Qt.TabFocus)
+        Keys.onReturnPressed: clicked()
+        Keys.onEnterPressed: clicked()
     }
 
     // Floating streaming-profile chip -- always shows the active profile name
@@ -1150,7 +1159,8 @@ FocusScope {
         anchors.topMargin: 14
         z: 10
 
-        focusPolicy: Qt.NoFocus
+        focusPolicy: Qt.TabFocus
+        activeFocusOnTab: true
         flat: true
         text: StreamingProfileManager.activeProfileName
         padding: 12
@@ -1167,6 +1177,12 @@ FocusScope {
         Material.foreground: "white"
 
         onClicked: openStreamingProfiles()
+
+        Keys.onRightPressed: pcSettingsButton.forceActiveFocus(Qt.TabFocus)
+        Keys.onDownPressed: pcList.forceActiveFocus(Qt.TabFocus)
+        Keys.onEscapePressed: pcList.forceActiveFocus(Qt.TabFocus)
+        Keys.onReturnPressed: clicked()
+        Keys.onEnterPressed: clicked()
     }
 
     // ===== Status pill =====

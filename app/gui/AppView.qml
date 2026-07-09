@@ -111,6 +111,18 @@ CenteredGridView {
 
     model: appModel
 
+    // Up from the top row of tiles escapes focus to the floating button
+    // row (view toggle / profile / settings / back) so a controller or
+    // keyboard-only user can reach them without a mouse. GridView handles
+    // Up/Down/Left/Right internally for in-grid movement, so this only
+    // needs to intercept the case where we're already at the top row.
+    Keys.onUpPressed: {
+        if (currentIndex >= 0 && currentIndex < itemsPerRow) {
+            coverflowToggleButton.forceActiveFocus(Qt.TabFocus)
+            event.accepted = true
+        }
+    }
+
     Item {
         id: appBackgroundLayer
         parent: appGrid
@@ -832,7 +844,8 @@ CenteredGridView {
 
             RoundButton {
                 id: coverflowToggleButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/ic_view_carousel.svg"
 
                 ToolTip.text: qsTr("Switch to Coverflow View")
@@ -843,6 +856,7 @@ CenteredGridView {
                 Material.background: Qt.rgba(1, 1, 1, 0.06)
 
                 onClicked: {
+                    StreamingPreferences.appViewCoverflow = true
                     var component = Qt.createComponent("AppCoverflowView.qml")
                     var coverflowView = component.createObject(stackView, {
                                                                     "objectName": appGrid.objectName,
@@ -852,11 +866,18 @@ CenteredGridView {
                                                                 })
                     stackView.replace(appGrid, coverflowView, StackView.Immediate)
                 }
+
+                Keys.onRightPressed: appGridProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: appGridProfileButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 implicitHeight: 36
                 flat: true
                 text: StreamingProfileManager.activeProfileName
@@ -885,11 +906,19 @@ CenteredGridView {
                         stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": appGrid.objectName})
                     }
                 }
+
+                Keys.onLeftPressed: coverflowToggleButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: appGridSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: appGridSettingsButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/settings.svg"
 
                 ToolTip.text: qsTr("Settings")
@@ -911,11 +940,19 @@ CenteredGridView {
                         stackView.push("qrc:/gui/SettingsView.qml", {"hostName": appGrid.objectName})
                     }
                 }
+
+                Keys.onLeftPressed: appGridProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: backButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
 
             RoundButton {
                 id: backButton
-                focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
                 icon.source: "qrc:/res/arrow_left.svg"
 
                 ToolTip.text: qsTr("Back to Host Select")
@@ -926,6 +963,12 @@ CenteredGridView {
                 Material.background: Qt.rgba(1, 1, 1, 0.06)
 
                 onClicked: stackView.pop()
+
+                Keys.onLeftPressed: appGridSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
         }
     }

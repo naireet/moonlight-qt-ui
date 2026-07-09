@@ -167,6 +167,7 @@ public:
     Q_PROPERTY(StatsOverlayColor statsOverlayColor MEMBER statsOverlayColor NOTIFY statsOverlayColorChanged)
     Q_PROPERTY(int appGridTileScale MEMBER appGridTileScale NOTIFY appGridTileScaleChanged)
     Q_PROPERTY(int appGridTileGap MEMBER appGridTileGap NOTIFY appGridTileGapChanged)
+    Q_PROPERTY(bool appViewCoverflow MEMBER appViewCoverflow NOTIFY appViewCoverflowChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
@@ -217,6 +218,7 @@ public:
     StatsOverlayColor statsOverlayColor;
     int appGridTileScale;
     int appGridTileGap;
+    bool appViewCoverflow;
     bool swapMouseButtons;
     bool muteOnFocusLoss;
     bool backgroundGamepad;
@@ -272,6 +274,7 @@ signals:
     void statsOverlayColorChanged();
     void appGridTileScaleChanged();
     void appGridTileGapChanged();
+    void appViewCoverflowChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();
