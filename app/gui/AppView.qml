@@ -744,7 +744,7 @@ CenteredGridView {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 14
-        height: 44
+        height: 56
         z: 10
 
         // Dark glass status chip -- same recipe as PcView's bottom
@@ -833,11 +833,7 @@ CenteredGridView {
             RoundButton {
                 id: coverflowToggleButton
                 focusPolicy: Qt.NoFocus
-                implicitWidth: 36
-                implicitHeight: 36
-                icon.source: "qrc:/res/ic_add_to_queue_white_48px.svg"
-                icon.width: 18
-                icon.height: 18
+                icon.source: "qrc:/res/ic_view_carousel.svg"
 
                 ToolTip.text: qsTr("Switch to Coverflow View")
                 ToolTip.delay: 1000
@@ -894,11 +890,7 @@ CenteredGridView {
             RoundButton {
                 id: appGridSettingsButton
                 focusPolicy: Qt.NoFocus
-                implicitWidth: 36
-                implicitHeight: 36
                 icon.source: "qrc:/res/settings.svg"
-                icon.width: 18
-                icon.height: 18
 
                 ToolTip.text: qsTr("Settings")
                 ToolTip.delay: 1000
@@ -924,11 +916,7 @@ CenteredGridView {
             RoundButton {
                 id: backButton
                 focusPolicy: Qt.NoFocus
-                implicitWidth: 36
-                implicitHeight: 36
                 icon.source: "qrc:/res/arrow_left.svg"
-                icon.width: 18
-                icon.height: 18
 
                 ToolTip.text: qsTr("Back to Host Select")
                 ToolTip.delay: 1000
