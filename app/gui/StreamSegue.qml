@@ -125,8 +125,11 @@ Item {
     }
 
     StackView.onDeactivating: {
-        // Show the toolbar again when popped off the stack
-        toolBar.visible = true
+        // Show the toolbar again when popped off the stack (see the
+        // comment in QuitSegue.qml's StackView.onActivated for why this
+        // goes through window.streamActive rather than a direct
+        // toolBar.visible assignment)
+        window.streamActive = false
 
         // Re-enable GUI gamepad usage now
         SdlGamepadKeyNavigation.enable()
@@ -134,7 +137,7 @@ Item {
 
     StackView.onActivated: {
         // Hide the toolbar before we start loading
-        toolBar.visible = false
+        window.streamActive = true
 
         // Hook up our signals
         session.stageStarting.connect(stageStarting)

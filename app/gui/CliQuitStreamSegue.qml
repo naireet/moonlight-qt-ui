@@ -20,7 +20,10 @@ Item {
 
     StackView.onActivated: {
         if (!launcher.isExecuted()) {
-            toolBar.visible = false
+            // See QuitSegue.qml's StackView.onActivated for why this goes
+            // through window.streamActive rather than a direct
+            // toolBar.visible assignment.
+            window.streamActive = true
             launcher.searchingComputer.connect(onSearchingComputer)
             launcher.quittingApp.connect(onQuittingApp)
             launcher.failed.connect(onFailure)

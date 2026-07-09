@@ -35,8 +35,13 @@ Item {
     }
 
     StackView.onActivated: {
-        // Hide the toolbar before we start loading
-        toolBar.visible = false
+        // Hide the toolbar before we start loading. This must go through
+        // window.streamActive (a plain property folded into the header's
+        // visible: binding in main.qml) rather than imperatively setting
+        // toolBar.visible directly -- an imperative assignment permanently
+        // destroys that binding in QML, which used to leave the stock
+        // toolbar stuck visible on every page after the very first quit.
+        window.streamActive = true
 
         // Connect the quit completion signal
         ComputerManager.quitAppCompleted.connect(quitAppCompleted)
@@ -48,8 +53,9 @@ Item {
     }
 
     StackView.onDeactivating: {
-        // Show the toolbar again
-        toolBar.visible = true
+        // Show the toolbar again (see the comment in StackView.onActivated
+        // above for why this goes through window.streamActive)
+        window.streamActive = false
 
         // Disconnect the signal
         ComputerManager.quitAppCompleted.disconnect(quitAppCompleted)
