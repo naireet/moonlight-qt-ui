@@ -214,23 +214,33 @@ void AppModel::updateAppList(QVector<NvApp> newList)
 
     // Process additions now
     for (const NvApp& newApp : std::as_const(newVisibleList)) {
-        int insertionIndex = m_VisibleApps.size();
+        // First determine whether this app already exists in our list. This
+        // must be a full scan for an ID match rather than bailing out early
+        // on a sort-order comparison, because the "process removals and
+        // updates" pass above may have already mutated an existing app's
+        // sort key in place (e.g. toggling favorite) without moving it. If
+        // we stopped at the first sort-order violation, we could conclude
+        // an already-present app was "not found" before we ever reached its
+        // (still stale) position, causing it to be inserted a second time.
         bool found = false;
 
         for (int i = 0; i < m_VisibleApps.count(); i++) {
-            const NvApp& existingApp = m_VisibleApps.at(i);
-
-            if (existingApp.id == newApp.id) {
+            if (m_VisibleApps.at(i).id == newApp.id) {
                 found = true;
-                break;
-            }
-            else if (appDisplayOrderLessThan(newApp, existingApp)) {
-                insertionIndex = i;
                 break;
             }
         }
 
         if (!found) {
+            int insertionIndex = m_VisibleApps.size();
+
+            for (int i = 0; i < m_VisibleApps.count(); i++) {
+                if (appDisplayOrderLessThan(newApp, m_VisibleApps.at(i))) {
+                    insertionIndex = i;
+                    break;
+                }
+            }
+
             beginInsertRows(QModelIndex(), insertionIndex, insertionIndex);
             m_VisibleApps.insert(insertionIndex, newApp);
             endInsertRows();
