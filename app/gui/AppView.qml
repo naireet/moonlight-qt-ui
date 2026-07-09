@@ -882,7 +882,7 @@ CenteredGridView {
                         existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
                     }
                     else {
-                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6})
+                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": appGrid.objectName})
                     }
                 }
             }
@@ -908,7 +908,7 @@ CenteredGridView {
                         stackView.pop(existingItem)
                     }
                     else {
-                        stackView.push("qrc:/gui/SettingsView.qml")
+                        stackView.push("qrc:/gui/SettingsView.qml", {"hostName": appGrid.objectName})
                     }
                 }
             }

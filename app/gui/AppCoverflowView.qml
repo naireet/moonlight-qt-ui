@@ -415,7 +415,7 @@ Item {
                         existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
                     }
                     else {
-                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6})
+                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": coverflowView.objectName})
                     }
                 }
             }
@@ -441,7 +441,7 @@ Item {
                         stackView.pop(existingItem)
                     }
                     else {
-                        stackView.push("qrc:/gui/SettingsView.qml")
+                        stackView.push("qrc:/gui/SettingsView.qml", {"hostName": coverflowView.objectName})
                     }
                 }
             }

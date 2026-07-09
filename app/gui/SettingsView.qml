@@ -11,7 +11,16 @@ import SystemProperties 1.0
 
 Item {
     id: settingsPage
-    objectName: qsTr("Settings")
+
+    // Set by whichever screen pushed us (PcView/AppView/AppCoverflowView)
+    // when a specific host is in context, so the toolbar title (bound to
+    // objectName below, which main.qml's stock header displays) can read
+    // "{HostName} - Host Settings" matching the mockup's Settings appbar,
+    // instead of a bare "Settings" with no host context. Falls back to
+    // plain "Settings" when reached with no host in context (there isn't
+    // one currently, but this keeps the page usable if that ever changes).
+    property string hostName: ""
+    objectName: hostName !== "" ? qsTr("%1 - Host Settings").arg(hostName) : qsTr("Settings")
 
     signal languageChanged()
 
