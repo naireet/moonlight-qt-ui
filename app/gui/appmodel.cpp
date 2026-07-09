@@ -1,5 +1,7 @@
 #include "appmodel.h"
 
+#include "settings/streamingprofilemanager.h"
+
 #include <algorithm>
 
 AppModel::AppModel(QObject *parent)
@@ -45,6 +47,26 @@ Session* AppModel::createSessionForApp(int appIndex)
 {
     Q_ASSERT(appIndex < m_VisibleApps.count());
     NvApp app = m_VisibleApps.at(appIndex);
+
+    if (!app.preferredProfileId.isEmpty()) {
+        // Build a standalone StreamingPreferences instance (NOT the global
+        // singleton) so applying a pinned per-app profile here can never
+        // touch the user's actual globally-active profile or its settings.
+        // Its constructor loads current saved values as a baseline, then
+        // applyProfileTo() overwrites the profile-controlled fields on top
+        // -- no save() call, no signal emission, nothing persisted. Session
+        // takes ownership (ownsPreferences=true) and will delete it when
+        // the session ends, since nothing else references it.
+        StreamingPreferences* overridePreferences = StreamingPreferences::createStandalone(nullptr);
+        if (StreamingProfileManager::get()->applyProfileTo(app.preferredProfileId, overridePreferences)) {
+            return new Session(m_Computer, app, overridePreferences, /* ownsPreferences= */ true);
+        }
+
+        // The pinned profile no longer exists (e.g. it was deleted) --
+        // fall back to the global default rather than leaking or using an
+        // unapplied, half-baked preferences object.
+        delete overridePreferences;
+    }
 
     return new Session(m_Computer, app);
 }
@@ -99,6 +121,8 @@ QVariant AppModel::data(const QModelIndex &index, int role) const
         return app.favoriteOrder;
     case AppCollectorGameRole:
         return app.isAppCollectorGame;
+    case PreferredProfileIdRole:
+        return app.preferredProfileId;
     default:
         return QVariant();
     }
@@ -117,6 +141,7 @@ QHash<int, QByteArray> AppModel::roleNames() const
     names[FavoriteRole] = "favorite";
     names[FavoriteOrderRole] = "favoriteOrder";
     names[AppCollectorGameRole] = "appCollectorGame";
+    names[PreferredProfileIdRole] = "preferredProfileId";
 
     return names;
 }
@@ -334,6 +359,28 @@ void AppModel::setAppFavorite(int appIndex, bool favorite)
                     app.favorite = false;
                     app.favoriteOrder = -1;
                 }
+                break;
+            }
+        }
+    }
+
+    m_ComputerManager->clientSideAttributeUpdated(m_Computer);
+}
+
+void AppModel::setAppPreferredProfile(int appIndex, const QString& profileId)
+{
+    Q_ASSERT(appIndex < m_VisibleApps.count());
+    int appId = m_VisibleApps.at(appIndex).id;
+
+    {
+        QWriteLocker lock(&m_Computer->lock);
+
+        for (NvApp& app : m_Computer->appList) {
+            if (app.id == appId) {
+                // An empty profileId clears the override, reverting this
+                // app to always using whichever profile is globally active
+                // at launch time -- the pre-existing default behavior.
+                app.preferredProfileId = profileId;
                 break;
             }
         }

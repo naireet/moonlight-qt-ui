@@ -786,6 +786,68 @@ Item {
                         ToolTip.timeout: 5000
                         ToolTip.visible: hovered
                     }
+
+                    // Captured once at this scope (not inside the Repeater
+                    // below, where "model" instead refers to the Repeater's
+                    // own profile-list model) so the profile-picker items
+                    // below can still read/act on the correct app's index
+                    // and its currently pinned profile.
+                    property int menuAppIndex: model.index
+                    property string menuPreferredProfileId: model.preferredProfileId
+
+                    // "var" properties are reactive in QML -- rebinding
+                    // these from onProfileListChanged keeps this menu from
+                    // showing stale profile names/ids if it's reopened
+                    // after profiles were added/removed/renamed in
+                    // Settings, following the same refresh pattern
+                    // SettingsView.qml's own profile picker already uses.
+                    property var menuProfileIds: StreamingProfileManager.profileIds()
+                    property var menuProfileNames: StreamingProfileManager.profileNames()
+
+                    Connections {
+                        target: StreamingProfileManager
+
+                        function onProfileListChanged() {
+                            appContextMenu.menuProfileIds = StreamingProfileManager.profileIds()
+                            appContextMenu.menuProfileNames = StreamingProfileManager.profileNames()
+                        }
+                    }
+
+                    // Lets a specific app always launch with a pinned
+                    // streaming profile's settings, regardless of whichever
+                    // profile is currently the global "Active Profile" in
+                    // Settings. Every profile is listed here, including
+                    // whichever one happens to currently be the global
+                    // active profile -- pinning that one explicitly stays
+                    // locked to that specific profile even if the global
+                    // active profile is later switched to something else in
+                    // Settings. Clicking an already-checked entry un-pins it
+                    // (clears back to following the global active profile
+                    // dynamically) instead of exposing a separate "use
+                    // global default" item, which was confusing alongside
+                    // the per-profile list. Only shown when there's more
+                    // than one profile to choose between -- with just one
+                    // profile, there's nothing meaningful to pin.
+                    MenuSeparator {
+                        visible: appContextMenu.menuProfileIds.length > 1
+                    }
+
+                    Repeater {
+                        model: appContextMenu.menuProfileIds.length > 1 ? appContextMenu.menuProfileIds.length : 0
+
+                        NavigableMenuItem {
+                            checkable: true
+                            checked: appContextMenu.menuPreferredProfileId === appContextMenu.menuProfileIds[index]
+                            text: qsTr("Launch with: %1").arg(appContextMenu.menuProfileNames[index])
+                            onTriggered: {
+                                if (appContextMenu.menuPreferredProfileId === appContextMenu.menuProfileIds[index]) {
+                                    appModel.setAppPreferredProfile(appContextMenu.menuAppIndex, "")
+                                } else {
+                                    appModel.setAppPreferredProfile(appContextMenu.menuAppIndex, appContextMenu.menuProfileIds[index])
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

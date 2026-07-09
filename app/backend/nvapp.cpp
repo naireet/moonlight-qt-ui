@@ -8,6 +8,7 @@
 #define SER_DIRECTLAUNCH "directlaunch"
 #define SER_FAVORITE "favorite"
 #define SER_FAVORITEORDER "favoriteorder"
+#define SER_PREFERREDPROFILE "preferredprofile"
 
 NvApp::NvApp(QSettings& settings)
 {
@@ -19,6 +20,7 @@ NvApp::NvApp(QSettings& settings)
     directLaunch = settings.value(SER_DIRECTLAUNCH).toBool();
     favorite = settings.value(SER_FAVORITE).toBool();
     favoriteOrder = settings.value(SER_FAVORITEORDER, -1).toInt();
+    preferredProfileId = settings.value(SER_PREFERREDPROFILE).toString();
 }
 
 void NvApp::serialize(QSettings& settings) const
@@ -31,4 +33,5 @@ void NvApp::serialize(QSettings& settings) const
     settings.setValue(SER_DIRECTLAUNCH, directLaunch);
     settings.setValue(SER_FAVORITE, favorite);
     settings.setValue(SER_FAVORITEORDER, favoriteOrder);
+    settings.setValue(SER_PREFERREDPROFILE, preferredProfileId);
 }
