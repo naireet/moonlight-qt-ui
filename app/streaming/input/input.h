@@ -20,10 +20,8 @@ struct GamepadState {
 #endif
 
     SDL_TimerID mouseEmulationTimer;
-    SDL_TimerID guideChordTimer;
     uint32_t lastStartDownTime;
 
-    bool guideChordSent;
     bool clickpadButtonEmulationEnabled;
     bool emulatedClickpadButtonDown;
 
@@ -198,9 +196,6 @@ private:
 
     static
     Uint32 mouseEmulationTimerCallback(Uint32 interval, void* param);
-
-    static
-    Uint32 guideChordTimerCallback(Uint32 interval, void* param);
 
     static
     Uint32 releaseLeftButtonTimerCallback(Uint32 interval, void* param);
