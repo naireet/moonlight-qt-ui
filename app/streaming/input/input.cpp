@@ -211,6 +211,11 @@ SdlInputHandler::~SdlInputHandler()
             Session::get()->notifyMouseEmulationMode(false);
             SDL_RemoveTimer(m_GamepadState[i].mouseEmulationTimer);
         }
+
+        // Release Shift+Tab on the host if the session is torn down mid-hold.
+        // raiseAllKeys() does not cover this: the synthetic keys are never added
+        // to m_KeysDown, so nothing else will ever raise them.
+        cancelSteamOverlayKeyHold(&m_GamepadState[i]);
 #if !SDL_VERSION_ATLEAST(2, 0, 9)
         if (m_GamepadState[i].haptic != nullptr) {
             SDL_HapticClose(m_GamepadState[i].haptic);

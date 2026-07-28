@@ -20,6 +20,7 @@ struct GamepadState {
 #endif
 
     SDL_TimerID mouseEmulationTimer;
+    SDL_TimerID steamOverlayKeyTimer;
     uint32_t lastStartDownTime;
 
     bool clickpadButtonEmulationEnabled;
@@ -196,6 +197,15 @@ private:
 
     static
     Uint32 mouseEmulationTimerCallback(Uint32 interval, void* param);
+
+    static
+    Uint32 steamOverlayKeyTimerCallback(Uint32 interval, void* param);
+
+    static
+    void sendSteamOverlayKeysUp();
+
+    static
+    void cancelSteamOverlayKeyHold(GamepadState* state);
 
     static
     Uint32 releaseLeftButtonTimerCallback(Uint32 interval, void* param);
