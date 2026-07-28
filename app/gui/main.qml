@@ -18,19 +18,35 @@ ApplicationWindow {
     // a retranslate() because AppView breaks for some reason.
     property bool clearOnBack: false
 
+    // Set by StreamSegue/QuitSegue/CLI segues while a stream is starting,
+    // active, or being quit, to force-hide the header regardless of which
+    // page it is layered over. This must be a plain property (not an
+    // imperative "toolBar.visible = true/false" from those segue files) --
+    // assigning directly to a property that already has a binding
+    // expression (like the header's `visible:` binding below) permanently
+    // destroys that binding in QML, which previously caused the stock
+    // header to get stuck permanently visible on every page after quitting
+    // a single stream, since the old code restored it with a flat
+    // "toolBar.visible = true" instead of restoring the binding.
+    property bool streamActive: false
+
     id: window
     width: 1280
     height: 600
 
+    // Global dark theme. Every stock Qt Quick Controls surface (toolbar,
+    // settings page background, checkboxes, comboboxes, sliders, dialogs)
+    // derives its palette from these Material.* attached properties, so
+    // this is the single override point for the whole app's chrome instead
+    // of the previous per-page ad-hoc gray hack.
+    Material.theme: Material.Dark
+    Material.accent: StreamingPreferences.accentColor
+    Material.primary: "#12141c"
+    Material.background: "#0d0e14"
+    Material.foreground: "#eef0f6"
+
     // This function runs prior to creation of the initial StackView item
     function doEarlyInit() {
-        // Override the background color to Material 2 colors for Qt 6.5+
-        // in order to improve contrast between GFE's placeholder box art
-        // and the background of the app grid.
-        if (SystemProperties.usesMaterial3Theme) {
-            Material.background = "#303030"
-        }
-
         SdlGamepadKeyNavigation.enable()
     }
 
@@ -110,6 +126,30 @@ ApplicationWindow {
         id: stackView
         anchors.fill: parent
         focus: true
+        pushEnter: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "x"; from: stackView.width * 0.06; to: 0; duration: 200; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic }
+            }
+        }
+        pushExit: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "x"; from: 0; to: -stackView.width * 0.04; duration: 180; easing.type: Easing.InOutCubic }
+                NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 180; easing.type: Easing.InOutCubic }
+            }
+        }
+        popEnter: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "x"; from: -stackView.width * 0.04; to: 0; duration: 200; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic }
+            }
+        }
+        popExit: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "x"; from: 0; to: stackView.width * 0.06; duration: 180; easing.type: Easing.InOutCubic }
+                NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 180; easing.type: Easing.InOutCubic }
+            }
+        }
 
         Component.onCompleted: {
             // Perform our early initialization before constructing
@@ -235,6 +275,18 @@ ApplicationWindow {
 
     header: ToolBar {
         id: toolBar
+        // The host-select, app-grid, and coverflow screens have their own
+        // full-bleed aurora backgrounds and bespoke header chrome
+        // (wordmark/status pill on Host Select, host/search pill row on App
+        // Grid and Coverflow) -- the generic "Computers" toolbar chrome
+        // doesn't belong on top of any of them, so hide it there only.
+        // Settings/etc. still use this stock toolbar unchanged.
+        // ApplicationWindow already collapses an invisible header's space
+        // automatically (same idiom used by addPcButton elsewhere in this
+        // file) -- do NOT also bind height/anchors margins to visibility,
+        // that fights the window's internal header layout and causes a
+        // relayout feedback loop that pegs the UI thread.
+        visible: !window.streamActive && !(stackView.currentItem instanceof PcView) && !(stackView.currentItem instanceof AppView) && !(stackView.currentItem instanceof AppCoverflowView)
         height: 60
         anchors.topMargin: 5
         anchors.bottomMargin: 5

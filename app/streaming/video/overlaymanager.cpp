@@ -4,16 +4,20 @@
 using namespace Overlay;
 
 OverlayManager::OverlayManager() :
-    m_Renderer(nullptr),
-    m_FontData(Path::readDataFile("ModeSeven.ttf"))
+    m_Renderer(nullptr)
 {
     memset(m_Overlays, 0, sizeof(m_Overlays));
 
+    m_FontData[OverlayFontModeSeven] = Path::readDataFile("ModeSeven.ttf");
+    m_FontData[OverlayFontJetBrainsMono] = Path::readDataFile("JetBrainsMono.ttf");
+
     m_Overlays[OverlayType::OverlayDebug].color = {0xD0, 0xD0, 0x00, 0xFF};
     m_Overlays[OverlayType::OverlayDebug].fontSize = 20;
+    m_Overlays[OverlayType::OverlayDebug].fontKind = OverlayFontModeSeven;
 
     m_Overlays[OverlayType::OverlayStatusUpdate].color = {0xCC, 0x00, 0x00, 0xFF};
     m_Overlays[OverlayType::OverlayStatusUpdate].fontSize = 36;
+    m_Overlays[OverlayType::OverlayStatusUpdate].fontKind = OverlayFontModeSeven;
 
     // While TTF will usually not be initialized here, it is valid for that not to
     // be the case, since Session destruction is deferred and could overlap with
@@ -111,6 +115,27 @@ SDL_Color OverlayManager::getOverlayColor(OverlayType type)
     return m_Overlays[type].color;
 }
 
+void OverlayManager::setOverlayColor(OverlayType type, SDL_Color color)
+{
+    m_Overlays[type].color = color;
+}
+
+void OverlayManager::setOverlayFont(OverlayType type, OverlayFont font)
+{
+    if (m_Overlays[type].fontKind == font) {
+        return;
+    }
+
+    m_Overlays[type].fontKind = font;
+
+    // Force the font to be reopened with the new family next time this
+    // overlay is rendered.
+    if (m_Overlays[type].font != nullptr) {
+        TTF_CloseFont(m_Overlays[type].font);
+        m_Overlays[type].font = nullptr;
+    }
+}
+
 void OverlayManager::setOverlayRenderer(IOverlayRenderer* renderer)
 {
     m_Renderer = renderer;
@@ -124,14 +149,15 @@ void OverlayManager::notifyOverlayUpdated(OverlayType type)
 
     // Construct the required font to render the overlay
     if (m_Overlays[type].font == nullptr) {
-        if (m_FontData.isEmpty()) {
+        const QByteArray& fontData = m_FontData[m_Overlays[type].fontKind];
+        if (fontData.isEmpty()) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                          "SDL overlay font failed to load");
             return;
         }
 
-        // m_FontData must stay around until the font is closed
-        m_Overlays[type].font = TTF_OpenFontRW(SDL_RWFromConstMem(m_FontData.constData(), m_FontData.size()),
+        // fontData must stay around until the font is closed
+        m_Overlays[type].font = TTF_OpenFontRW(SDL_RWFromConstMem(fontData.constData(), fontData.size()),
                                                1,
                                                m_Overlays[type].fontSize);
         if (m_Overlays[type].font == nullptr) {

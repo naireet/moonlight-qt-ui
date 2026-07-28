@@ -98,7 +98,7 @@ class Session : public QObject
     friend class AsyncConnectionStartThread;
 
 public:
-    explicit Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences = nullptr);
+    explicit Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences = nullptr, bool ownsPreferences = false);
     virtual ~Session();
 
     Q_INVOKABLE bool initialize(QQuickWindow* qtWindow);
@@ -119,6 +119,11 @@ public:
     Overlay::OverlayManager& getOverlayManager()
     {
         return m_OverlayManager;
+    }
+
+    StreamingPreferences* getPreferences()
+    {
+        return m_Preferences;
     }
 
     void flushWindowEvents();
@@ -243,6 +248,13 @@ private:
     int drSubmitDecodeUnit(PDECODE_UNIT du);
 
     StreamingPreferences* m_Preferences;
+    // True when m_Preferences is a temporary, per-launch object this Session
+    // owns exclusively (e.g. a per-app pinned profile applied in
+    // AppModel::createSessionForApp()) rather than the immortal global
+    // StreamingPreferences::get() singleton. Only ever deleted in this case
+    // -- see the destructor -- since the global singleton must never be
+    // deleted.
+    bool m_OwnsPreferences;
     bool m_IsFullScreen;
     SupportedVideoFormatList m_SupportedVideoFormats; // Sorted in order of descending priority
     STREAM_CONFIGURATION m_StreamConfig;

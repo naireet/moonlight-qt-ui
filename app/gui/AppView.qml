@@ -1,10 +1,13 @@
-import QtQuick 2.9
+import QtQuick 2.15
 import QtQuick.Controls 2.2
 import QtQuick.Controls.Material 2.2
+import QtQuick.Effects
 
 import AppModel 1.0
 import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
+import StreamingPreferences 1.0
+import StreamingProfileManager 1.0
 
 CenteredGridView {
     property int computerIndex
@@ -12,13 +15,39 @@ CenteredGridView {
     property bool activated
     property bool showHiddenGames
     property bool showGames
+    property int tileWidth: Math.round(220 * StreamingPreferences.appGridTileScale / 100)
+    property int tileHeight: Math.round(287 * StreamingPreferences.appGridTileScale / 100)
+    property int tileGap: StreamingPreferences.appGridTileGap
+    property bool reorderModeActive: false
+    property int reorderModeAppId: -1
+    property bool subtleBackgroundMotion: StreamingPreferences.backgroundMotionTier == StreamingPreferences.MotionSubtle
+    property string focusedBackgroundArtSource: currentItem && currentItem.hasUsableBackgroundArt ? currentItem.boxArtSource : ""
 
     id: appGrid
     focus: true
     activeFocusOnTab: true
-    topMargin: 20
+    topMargin: 84
     bottomMargin: 5
-    cellWidth: 230; cellHeight: 297;
+    cellWidth: tileWidth + tileGap
+    cellHeight: tileHeight + tileGap
+
+    function isReorderTarget(appId)
+    {
+        return reorderModeActive && reorderModeAppId === appId
+    }
+
+    function beginReorderMode(appId)
+    {
+        reorderModeActive = true
+        reorderModeAppId = appId
+    }
+
+    function finishReorderMode()
+    {
+        appModel.commitFavoriteOrder()
+        reorderModeActive = false
+        reorderModeAppId = -1
+    }
 
     function computerLost()
     {
@@ -57,84 +86,429 @@ CenteredGridView {
     }
 
     StackView.onDeactivating: {
+        if (reorderModeActive) {
+            finishReorderMode()
+        }
+
         appModel.computerLost.disconnect(computerLost)
         activated = false
     }
 
     function createModel()
     {
-        var model = Qt.createQmlObject('import AppModel 1.0; AppModel {}', parent, '')
+        var model = Qt.createQmlObject('import AppModel 1.0; AppModel {}', appGrid, '')
         model.initialize(ComputerManager, computerIndex, showHiddenGames)
         return model
     }
 
+    function isPlaceholderBoxArt(sourceWidth, sourceHeight, isAppCollectorGame)
+    {
+        return !isAppCollectorGame &&
+                ((sourceWidth === 130 && sourceHeight === 180) ||
+                 (sourceWidth === 628 && sourceHeight === 888) ||
+                 (sourceWidth === 200 && sourceHeight === 266))
+    }
+
     model: appModel
 
+    // Up from the top row of tiles escapes focus to the floating button
+    // row (view toggle / profile / settings / back) so a controller or
+    // keyboard-only user can reach them without a mouse. GridView handles
+    // Up/Down/Left/Right internally for in-grid movement, so this only
+    // needs to intercept the case where we're already at the top row.
+    Keys.onUpPressed: {
+        if (currentIndex >= 0 && currentIndex < itemsPerRow) {
+            coverflowToggleButton.forceActiveFocus(Qt.TabFocus)
+            event.accepted = true
+        }
+    }
+
+    Item {
+        id: appBackgroundLayer
+        parent: appGrid
+        anchors.fill: parent
+        z: -1
+        clip: true
+
+        readonly property bool showSolidBackground: StreamingPreferences.backgroundStyle == StreamingPreferences.BackgroundSolid
+        readonly property bool showAppArtBackground: StreamingPreferences.backgroundStyle == StreamingPreferences.BackgroundAppArt &&
+                                                      appGrid.focusedBackgroundArtSource !== ""
+        readonly property bool showGradientBackground: !showSolidBackground && !showAppArtBackground
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.darker(StreamingPreferences.accentColor, 6)
+            visible: appBackgroundLayer.showSolidBackground
+        }
+
+        // Same three soft, slowly-drifting radial-gradient blobs (violet,
+        // teal, magenta) used on the Host Select screen -- this replaces
+        // the flat single-gradient fallback so the App Grid shares the
+        // same aurora visual identity instead of reading as plain/flat.
+        Item {
+            anchors.fill: parent
+            clip: true
+            visible: appBackgroundLayer.showGradientBackground
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#07080d"
+            }
+
+            Item {
+                id: appAuroraLayer
+                property real driftX: 0
+                property real driftY: 0
+                property real driftRotation: 0
+                x: -parent.width * 0.1 + driftX
+                y: -parent.height * 0.1 + driftY
+                width: parent.width * 1.2
+                height: parent.height * 1.2
+                rotation: driftRotation
+                transformOrigin: Item.Center
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 64
+                    autoPaddingEnabled: true
+                }
+
+                Rectangle {
+                    width: parent.width * 0.6
+                    height: parent.height * 0.6
+                    x: parent.width * 0.05
+                    y: parent.height * 0.05
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(90/255, 40/255, 200/255, 0.6) }
+                        GradientStop { position: 0.55; color: Qt.rgba(90/255, 40/255, 200/255, 0.16) }
+                        GradientStop { position: 1.0; color: Qt.rgba(90/255, 40/255, 200/255, 0.0) }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width * 0.62
+                    height: parent.height * 0.62
+                    x: parent.width * 0.42
+                    y: parent.height * 0.08
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(20/255, 140/255, 190/255, 0.55) }
+                        GradientStop { position: 0.55; color: Qt.rgba(20/255, 140/255, 190/255, 0.14) }
+                        GradientStop { position: 1.0; color: Qt.rgba(20/255, 140/255, 190/255, 0.0) }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width * 0.58
+                    height: parent.height * 0.58
+                    x: parent.width * 0.28
+                    y: parent.height * 0.52
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(200/255, 40/255, 120/255, 0.5) }
+                        GradientStop { position: 0.55; color: Qt.rgba(200/255, 40/255, 120/255, 0.13) }
+                        GradientStop { position: 1.0; color: Qt.rgba(200/255, 40/255, 120/255, 0.0) }
+                    }
+                }
+
+                SequentialAnimation on driftX {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 40; duration: 20000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -40; duration: 20000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on driftY {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 30; duration: 26000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -30; duration: 26000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on driftRotation {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showGradientBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 6; duration: 32000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -6; duration: 32000; easing.type: Easing.InOutSine }
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "black"
+                opacity: 0.12
+            }
+        }
+
+        Item {
+            anchors.fill: parent
+            clip: true
+            visible: appBackgroundLayer.showAppArtBackground
+
+            Image {
+                id: focusedAppBackgroundArt
+                property real driftX: 0
+                property real driftY: 0
+                property real ambientOpacity: 0.92
+                x: Math.round((parent.width - width) / 2 + driftX)
+                y: Math.round((parent.height - height) / 2 + driftY)
+                width: Math.round(parent.width * 1.18)
+                height: Math.round(parent.height * 1.18)
+                source: appGrid.focusedBackgroundArtSource
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                cache: true
+                opacity: ambientOpacity
+
+                SequentialAnimation on driftX {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showAppArtBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 10; duration: 24000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -10; duration: 24000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on driftY {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showAppArtBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 8; duration: 28000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -8; duration: 28000; easing.type: Easing.InOutSine }
+                }
+
+                SequentialAnimation on ambientOpacity {
+                    running: appGrid.subtleBackgroundMotion && appBackgroundLayer.showAppArtBackground
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.86; duration: 16000; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 0.92; duration: 16000; easing.type: Easing.InOutSine }
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "black"
+                opacity: 0.82
+            }
+        }
+    }
+
     delegate: NavigableItemDelegate {
-        width: 220; height: 287;
+        width: appGrid.tileWidth
+        height: appGrid.tileHeight
         grid: appGrid
+        scale: appGrid.isReorderTarget(model.appid) ? 1.08 :
+               ((highlighted || hovered) ? 1.04 : 1.0)
+        transformOrigin: Item.Center
+
+        leftKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                appModel.moveFavorite(model.index, -1)
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        rightKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                appModel.moveFavorite(model.index, 1)
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        downKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        upKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        returnKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                appGrid.finishReorderMode()
+                event.accepted = true
+                return true
+            }
+
+            if (model.running) {
+                appContextMenu.open()
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        enterKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                appGrid.finishReorderMode()
+                event.accepted = true
+                return true
+            }
+
+            if (model.running) {
+                appContextMenu.open()
+                event.accepted = true
+                return true
+            }
+
+            return false
+        }
+        escapeKeyHandler: function(event) {
+            if (appGrid.isReorderTarget(model.appid)) {
+                appGrid.finishReorderMode()
+                event.accepted = true
+                return true
+            }
+
+            event.accepted = false
+            return false
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 120
+            }
+        }
 
         property alias appContextMenu: appContextMenuLoader.item
         property alias appNameText: appNameTextLoader.item
+        property real tileScaleFactor: StreamingPreferences.appGridTileScale / 100.0
+        property int runningActionButtonSize: Math.round(85 * tileScaleFactor)
+        property int runningActionIconSize: Math.round(75 * tileScaleFactor)
+        property int runningActionPlaceholderHorizontalOffset: Math.round(47 * tileScaleFactor)
+        property int runningActionPlaceholderVerticalOffset: Math.round(75 * tileScaleFactor)
+        property int runningActionVerticalOffset: Math.round(60 * tileScaleFactor)
+        property int runningPlaceholderLabelHeight: Math.round(175 * tileScaleFactor)
+        property string boxArtSource: model.boxart
+        property bool hasUsableBackgroundArt: boxArtSource !== "" && appIcon.status === Image.Ready && !appIcon.isPlaceholder
+        property string segueBoxArtImageUrl: hasUsableBackgroundArt ? boxArtSource : ""
+        property int tileRadius: Math.round(14 * tileScaleFactor)
+        property bool tileEmphasized: highlighted || hovered
 
         // Dim the app if it's hidden
         opacity: model.hidden ? 0.4 : 1.0
 
-        Image {
-            property bool isPlaceholder: false
+        Rectangle {
+            anchors.fill: parent
+            z: 2
+            color: "transparent"
+            border.width: 3
+            border.color: StreamingPreferences.accentColor
+            visible: appGrid.isReorderTarget(model.appid)
+        }
 
-            id: appIcon
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 10
-            source: model.boxart
+        // Soft accent-colored glow behind the tile when it has focus/hover,
+        // matching the mockup's ".tile.sel" outer glow. Uses the same
+        // MultiEffect blur idiom as the aurora background blobs elsewhere
+        // in this app.
+        Rectangle {
+            id: appIconGlow
+            anchors.centerIn: appIconFrame
+            width: appIconFrame.width + Math.round(28 * tileScaleFactor)
+            height: appIconFrame.height + Math.round(28 * tileScaleFactor)
+            radius: tileRadius + Math.round(10 * tileScaleFactor)
+            color: StreamingPreferences.accentColor
+            opacity: tileEmphasized ? 0.55 : 0.0
+            visible: opacity > 0.01
 
-            onSourceSizeChanged: {
-                // Nearly all of Nvidia's official box art does not match the dimensions of placeholder
-                // images, however the one known exception is Overcooked. Therefore, we only execute
-                // the image size checks if this is not an app collector game. We know the officially
-                // supported games all have box art, so this check is not required.
-                if (!model.isAppCollectorGame &&
-                    ((sourceSize.width === 130 && sourceSize.height === 180) || // GFE 2.0 placeholder image
-                     (sourceSize.width === 628 && sourceSize.height === 888) || // GFE 3.0 placeholder image
-                     (sourceSize.width === 200 && sourceSize.height === 266)))  // Our no_app_image.png
-                {
-                    isPlaceholder = true
-                }
-                else
-                {
-                    isPlaceholder = false
-                }
-
-                width = 200
-                height = 267
+            Behavior on opacity {
+                NumberAnimation { duration: 120 }
             }
 
-            // Display a tooltip with the full name if it's truncated
-            ToolTip.text: model.name
-            ToolTip.delay: 1000
-            ToolTip.timeout: 5000
-            ToolTip.visible: (parent.hovered || parent.highlighted) && (!appNameText || appNameText.truncated)
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 32
+                autoPaddingEnabled: true
+            }
+        }
+
+        // Rounded, drop-shadowed card that frames the box art -- gives the
+        // flat square tiles a "card" treatment matching the mockup's
+        // border-radius + box-shadow tile styling. This owns the geometry
+        // the box art Image previously had directly; the Image now just
+        // fills this frame so its corners get clipped to match.
+        Rectangle {
+            id: appIconFrame
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Math.round(10 * StreamingPreferences.appGridTileScale / 100)
+            width: Math.round(200 * StreamingPreferences.appGridTileScale / 100)
+            height: Math.round(267 * StreamingPreferences.appGridTileScale / 100)
+            radius: tileRadius
+            clip: true
+            color: "transparent"
+            border.width: tileEmphasized ? 3 : 0
+            border.color: StreamingPreferences.accentColor
+
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: "#99000000"
+                shadowBlur: 0.7
+                shadowVerticalOffset: Math.round(8 * tileScaleFactor)
+                shadowHorizontalOffset: 0
+            }
+
+            Image {
+                property bool isPlaceholder: false
+
+                id: appIcon
+                anchors.fill: parent
+                source: model.boxart
+
+                onSourceSizeChanged: {
+                    // Nearly all of Nvidia's official box art does not match the dimensions of placeholder
+                    // images, however the one known exception is Overcooked. Therefore, we only execute
+                    // the image size checks if this is not an app collector game. We know the officially
+                    // supported games all have box art, so this check is not required.
+                    isPlaceholder = appGrid.isPlaceholderBoxArt(sourceSize.width, sourceSize.height, model.appCollectorGame)
+                }
+
+                // Display a tooltip with the full name if it's truncated
+                ToolTip.text: model.name
+                ToolTip.delay: 1000
+                ToolTip.timeout: 5000
+                ToolTip.visible: (parent.parent.hovered || parent.parent.highlighted) && (!appNameText || appNameText.truncated)
+            }
         }
 
         Loader {
             active: model.running
             asynchronous: true
-            anchors.fill: appIcon
+            // Anchor to appIconFrame (a direct sibling), not appIcon --
+            // appIcon is now nested one level deeper inside appIconFrame
+            // (the rounded card wrapper), and QML anchors only support
+            // siblings or a direct parent/child, not a grandchild. This
+            // was silently broken (buttons rendered detached from the
+            // tile) until a real running app exposed it.
+            anchors.fill: appIconFrame
 
             sourceComponent: Item {
                 RoundButton {
                     // Don't steal focus from the toolbar buttons
                     focusPolicy: Qt.NoFocus
 
-                    anchors.horizontalCenterOffset: appIcon.isPlaceholder ? -47 : 0
-                    anchors.verticalCenterOffset: appIcon.isPlaceholder ? -75 : -60
+                    anchors.horizontalCenterOffset: appIcon.isPlaceholder ? -runningActionPlaceholderHorizontalOffset : 0
+                    anchors.verticalCenterOffset: appIcon.isPlaceholder ? -runningActionPlaceholderVerticalOffset : -runningActionVerticalOffset
                     anchors.centerIn: parent
-                    implicitWidth: 85
-                    implicitHeight: 85
+                    implicitWidth: runningActionButtonSize
+                    implicitHeight: runningActionButtonSize
 
                     icon.source: "qrc:/res/play_arrow_FILL1_wght700_GRAD200_opsz48.svg"
-                    icon.width: 75
-                    icon.height: 75
+                    icon.width: runningActionIconSize
+                    icon.height: runningActionIconSize
 
                     onClicked: {
                         launchOrResumeSelectedApp(true)
@@ -152,15 +526,15 @@ CenteredGridView {
                     // Don't steal focus from the toolbar buttons
                     focusPolicy: Qt.NoFocus
 
-                    anchors.horizontalCenterOffset: appIcon.isPlaceholder ? 47 : 0
-                    anchors.verticalCenterOffset: appIcon.isPlaceholder ? -75 : 60
+                    anchors.horizontalCenterOffset: appIcon.isPlaceholder ? runningActionPlaceholderHorizontalOffset : 0
+                    anchors.verticalCenterOffset: appIcon.isPlaceholder ? -runningActionPlaceholderVerticalOffset : runningActionVerticalOffset
                     anchors.centerIn: parent
-                    implicitWidth: 85
-                    implicitHeight: 85
+                    implicitWidth: runningActionButtonSize
+                    implicitHeight: runningActionButtonSize
 
                     icon.source: "qrc:/res/stop_FILL1_wght700_GRAD200_opsz48.svg"
-                    icon.width: 75
-                    icon.height: 75
+                    icon.width: runningActionIconSize
+                    icon.height: runningActionIconSize
 
                     onClicked: {
                         doQuitGame()
@@ -184,11 +558,13 @@ CenteredGridView {
             // in the time in which the text loads for each game.
 
             width: appIcon.width
-            height: model.running ? 175 : appIcon.height
+            height: model.running ? runningPlaceholderLabelHeight : appIcon.height
 
-            anchors.left: appIcon.left
-            anchors.right: appIcon.right
-            anchors.bottom: appIcon.bottom
+            // Same grandchild-anchor fix as the running-state Loader above:
+            // anchor to appIconFrame (sibling), not appIcon (grandchild).
+            anchors.left: appIconFrame.left
+            anchors.right: appIconFrame.right
+            anchors.bottom: appIconFrame.bottom
 
             sourceComponent: Label {
                 id: appNameText
@@ -203,6 +579,25 @@ CenteredGridView {
             }
         }
 
+        Text {
+            // Same grandchild-anchor fix: appIconFrame is the sibling,
+            // appIcon is nested inside it.
+            anchors.left: appIconFrame.left
+            anchors.right: appIconFrame.right
+            anchors.bottom: parent.bottom
+            height: parent.height - appIconFrame.y - appIconFrame.height
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            fontSizeMode: Text.Fit
+            minimumPixelSize: 8
+            visible: parent.highlighted
+            z: 1
+            text: qsTr("Back: Options")
+            font.pixelSize: 10
+            color: "#CCFFFFFF"
+        }
+
         function launchOrResumeSelectedApp(quitExistingApp)
         {
             var runningId = appModel.getRunningAppId()
@@ -212,6 +607,7 @@ CenteredGridView {
                     quitAppDialog.segueToStream = true
                     quitAppDialog.nextAppName = model.name
                     quitAppDialog.nextAppIndex = index
+                    quitAppDialog.nextBoxArtImageUrl = segueBoxArtImageUrl
                     quitAppDialog.open()
                 }
 
@@ -222,12 +618,20 @@ CenteredGridView {
             var segue = component.createObject(stackView, {
                                                    "appName": model.name,
                                                    "session": appModel.createSessionForApp(index),
+                                                   "boxArtImageUrl": segueBoxArtImageUrl,
                                                    "isResume": runningId === model.appid
                                                })
             stackView.push(segue)
         }
 
         onClicked: {
+            if (appGrid.reorderModeActive) {
+                if (appGrid.isReorderTarget(model.appid)) {
+                    appGrid.finishReorderMode()
+                }
+                return
+            }
+
             // Only allow clicking on the box art for non-running games.
             // For running games, buttons will appear to resume or quit which
             // will handle starting the game and clicks on the box art will
@@ -238,6 +642,10 @@ CenteredGridView {
         }
 
         onPressAndHold: {
+            if (appGrid.reorderModeActive) {
+                return
+            }
+
             // popup() ensures the menu appears under the mouse cursor
             if (appContextMenu.popup) {
                 appContextMenu.popup()
@@ -256,29 +664,12 @@ CenteredGridView {
             }
         }
 
-        Keys.onReturnPressed: {
-            // Open the app context menu if activated via the gamepad or keyboard
-            // for running games. If the game isn't running, the above onClicked
-            // method will handle the launch.
-            if (model.running) {
-                // This will be keyboard/gamepad driven so use
-                // open() instead of popup()
-                appContextMenu.open()
-            }
-        }
-
-        Keys.onEnterPressed: {
-            // Open the app context menu if activated via the gamepad or keyboard
-            // for running games. If the game isn't running, the above onClicked
-            // method will handle the launch.
-            if (model.running) {
-                // This will be keyboard/gamepad driven so use
-                // open() instead of popup()
-                appContextMenu.open()
-            }
-        }
-
         Keys.onMenuPressed: {
+            if (appGrid.isReorderTarget(model.appid)) {
+                event.accepted = true
+                return
+            }
+
             // This will be keyboard/gamepad driven so use open() instead of popup()
             appContextMenu.open()
         }
@@ -305,6 +696,25 @@ CenteredGridView {
                     visible: model.running
                 }
                 NavigableMenuItem {
+                    text: qsTr("Favorite")
+                    onTriggered: appModel.setAppFavorite(model.index, true)
+                    visible: !model.favorite
+                }
+                NavigableMenuItem {
+                    text: qsTr("Move")
+                    visible: model.favorite
+                    enabled: !appGrid.reorderModeActive || appGrid.reorderModeAppId === model.appid
+                    onTriggered: {
+                        appGrid.beginReorderMode(model.appid)
+                        appContextMenu.close()
+                    }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Unfavorite")
+                    onTriggered: appModel.setAppFavorite(model.index, false)
+                    visible: model.favorite
+                }
+                NavigableMenuItem {
                     checkable: true
                     checked: model.directLaunch
                     text: qsTr("Direct Launch")
@@ -328,6 +738,316 @@ CenteredGridView {
                     ToolTip.timeout: 5000
                     ToolTip.visible: hovered
                 }
+
+                // Captured once at this scope (not inside the Repeater
+                // below, where "model" instead refers to the Repeater's own
+                // profile-list model) so the profile-picker items below can
+                // still read/act on the correct app's index and its
+                // currently pinned profile.
+                property int menuAppIndex: model.index
+                property string menuPreferredProfileId: model.preferredProfileId
+
+                // "var" properties are reactive in QML -- rebinding these
+                // from onProfileListChanged keeps this menu from showing
+                // stale profile names/ids if it's reopened after profiles
+                // were added/removed/renamed in Settings, following the
+                // same refresh pattern SettingsView.qml's own profile
+                // picker already uses.
+                property var menuProfileIds: StreamingProfileManager.profileIds()
+                property var menuProfileNames: StreamingProfileManager.profileNames()
+
+                Connections {
+                    target: StreamingProfileManager
+
+                    function onProfileListChanged() {
+                        appContextMenu.menuProfileIds = StreamingProfileManager.profileIds()
+                        appContextMenu.menuProfileNames = StreamingProfileManager.profileNames()
+                    }
+                }
+
+                // Lets a specific app always launch with a pinned streaming
+                // profile's settings, regardless of whichever profile is
+                // currently the global "Active Profile" in Settings. Every
+                // profile is listed here, including whichever one happens
+                // to currently be the global active profile -- pinning that
+                // one explicitly stays locked to that specific profile even
+                // if the global active profile is later switched to
+                // something else in Settings. Clicking an already-checked
+                // entry un-pins it (clears back to following the global
+                // active profile dynamically) instead of exposing a
+                // separate "use global default" item, which was confusing
+                // alongside the per-profile list. Only shown when there's
+                // more than one profile to choose between -- with just one
+                // profile, there's nothing meaningful to pin.
+                MenuSeparator {
+                    visible: appContextMenu.menuProfileIds.length > 1
+                }
+
+                Repeater {
+                    model: appContextMenu.menuProfileIds.length > 1 ? appContextMenu.menuProfileIds.length : 0
+
+                    NavigableMenuItem {
+                        checkable: true
+                        checked: appContextMenu.menuPreferredProfileId === appContextMenu.menuProfileIds[index]
+                        text: qsTr("Launch with: %1").arg(appContextMenu.menuProfileNames[index])
+                        onTriggered: {
+                            if (appContextMenu.menuPreferredProfileId === appContextMenu.menuProfileIds[index]) {
+                                appModel.setAppPreferredProfile(appContextMenu.menuAppIndex, "")
+                            } else {
+                                appModel.setAppPreferredProfile(appContextMenu.menuAppIndex, appContextMenu.menuProfileIds[index])
+                            }
+                        }
+                    }
+                }
+            }
+
+            // NavigableMenu only moves focus INTO itself on open (see
+            // NavigableMenu.qml's onOpened) -- it never hands focus back
+            // to whatever had it before, whether the menu is dismissed by
+            // selecting an item, pressing Escape, or clicking outside.
+            // Without this, closing a tile's context menu leaves keyboard/
+            // gamepad focus nowhere, so D-pad input silently stops
+            // navigating the grid until the view is freshly re-entered.
+            // Mirrors the equivalent fix already in place for PcView.qml's
+            // host context menu (pcContextMenuLoader.item.onClosed ->
+            // pcList.forceActiveFocus()) and AppCoverflowView.qml's list.
+            Connections {
+                target: appContextMenuLoader.item
+
+                function onClosed() {
+                    appGrid.forceActiveFocus()
+                }
+            }
+        }
+    }
+
+    // Custom header row replacing the stock "Computers" ToolBar for this
+    // screen (hidden for AppView in main.qml) -- a lightweight, transparent
+    // pill-based bar matching the mockup's ".appbar": an accent host-name
+    // pill on the left, a search pill in the center (UI-only for now, same
+    // precedent already established by AppCoverflowView's search field),
+    // and small circular icon buttons on the right for the coverflow-view
+    // toggle and going back to Host Select.
+    Item {
+        id: appHeaderBar
+        parent: appGrid
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: 14
+        height: 56
+        z: 10
+
+        // Dark glass status chip -- same recipe as PcView's bottom
+        // status pill (id: statusPill), not a solid/gradient accent
+        // fill. A saturated color-filled chip reads as a "sticker" /
+        // clickable CTA against the soft blurred aurora background no
+        // matter how the gradient is tuned (this was tried through
+        // several iterations and consistently didn't work); a quiet
+        // dark glass chip with a small colored status dot reads as
+        // "connected to this host" instead, consistent with the
+        // Host Select screen's own host-status pill.
+        Rectangle {
+            id: hostPill
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            radius: height / 2
+            color: "#141620"
+            border.width: 1
+            border.color: "#17ffffff"
+            width: hostPillContent.width + 36
+            height: hostPillContent.height + 20
+
+            Row {
+                id: hostPillContent
+                anchors.centerIn: parent
+                spacing: 10
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 9
+                    height: 9
+                    radius: 4.5
+                    color: "#39d353"
+                }
+
+                Label {
+                    id: hostPillLabel
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: appGrid.objectName
+                    color: "#eef0f6"
+                    font.pointSize: 11
+                }
+            }
+        }
+
+        Rectangle {
+            id: searchPill
+            anchors.centerIn: parent
+            width: 260
+            height: 36
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.06)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.09)
+
+            TextInput {
+                id: searchField
+                anchors.fill: parent
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                verticalAlignment: Text.AlignVCenter
+                color: "white"
+                font.pointSize: 10
+                clip: true
+
+                // Matches the "v1 is UI-only, no filtering yet" precedent
+                // already set by AppCoverflowView's search field -- this is
+                // a visual/appbar-composition pass, not new search feature
+                // work.
+                Text {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("Search apps…")
+                    color: Qt.rgba(1, 1, 1, 0.45)
+                    font.pointSize: 10
+                    visible: !searchField.text.length && !searchField.activeFocus
+                }
+            }
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+
+            RoundButton {
+                id: coverflowToggleButton
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
+                icon.source: "qrc:/res/ic_view_carousel.svg"
+
+                ToolTip.text: qsTr("Switch to Coverflow View")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: {
+                    StreamingPreferences.appViewCoverflow = true
+                    var component = Qt.createComponent("AppCoverflowView.qml")
+                    var coverflowView = component.createObject(stackView, {
+                                                                    "objectName": appGrid.objectName,
+                                                                    "computerIndex": computerIndex,
+                                                                    "showHiddenGames": showHiddenGames,
+                                                                    "showGames": showGames
+                                                                })
+                    stackView.replace(appGrid, coverflowView, StackView.Immediate)
+                }
+
+                Keys.onRightPressed: appGridProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+            }
+
+            RoundButton {
+                id: appGridProfileButton
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
+                implicitHeight: 36
+                flat: true
+                text: StreamingProfileManager.activeProfileName
+                font.pointSize: 9
+                icon.source: "qrc:/res/person.svg"
+                icon.width: 16
+                icon.height: 16
+
+                ToolTip.text: qsTr("Streaming Profile")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+                Material.foreground: "white"
+
+                onClicked: {
+                    var existingItem = stackView.find(function(item, index) {
+                        return item instanceof SettingsView
+                    })
+
+                    if (existingItem !== null) {
+                        existingItem.currentSectionIndex = existingItem.streamingProfilesSectionIndex
+                    }
+                    else {
+                        stackView.push("qrc:/gui/SettingsView.qml", {"initialSectionIndex": 6, "hostName": appGrid.objectName})
+                    }
+                }
+
+                Keys.onLeftPressed: coverflowToggleButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: appGridSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+            }
+
+            RoundButton {
+                id: appGridSettingsButton
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
+                icon.source: "qrc:/res/settings.svg"
+
+                ToolTip.text: qsTr("Settings")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: {
+                    var existingItem = stackView.find(function(item, index) {
+                        return item instanceof SettingsView
+                    })
+
+                    if (existingItem !== null) {
+                        stackView.pop(existingItem)
+                    }
+                    else {
+                        stackView.push("qrc:/gui/SettingsView.qml", {"hostName": appGrid.objectName})
+                    }
+                }
+
+                Keys.onLeftPressed: appGridProfileButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onRightPressed: backButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+            }
+
+            RoundButton {
+                id: backButton
+                focusPolicy: Qt.TabFocus
+                activeFocusOnTab: true
+                icon.source: "qrc:/res/arrow_left.svg"
+
+                ToolTip.text: qsTr("Back to Host Select")
+                ToolTip.delay: 1000
+                ToolTip.timeout: 3000
+                ToolTip.visible: hovered
+
+                Material.background: Qt.rgba(1, 1, 1, 0.06)
+
+                onClicked: stackView.pop()
+
+                Keys.onLeftPressed: appGridSettingsButton.forceActiveFocus(Qt.TabFocus)
+                Keys.onDownPressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onEscapePressed: appGrid.forceActiveFocus(Qt.TabFocus)
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
             }
         }
     }
@@ -351,6 +1071,7 @@ CenteredGridView {
         property bool segueToStream : false
         property string nextAppName: ""
         property int nextAppIndex: 0
+        property string nextBoxArtImageUrl: ""
         text:qsTr("Are you sure you want to quit %1? Any unsaved progress will be lost.").arg(appName)
         standardButtons: Dialog.Yes | Dialog.No
 
@@ -362,6 +1083,7 @@ CenteredGridView {
                 // successfully quitting the old app.
                 params.nextAppName = nextAppName
                 params.nextSession = appModel.createSessionForApp(nextAppIndex)
+                params.nextBoxArtImageUrl = nextBoxArtImageUrl
             }
             else {
                 params.nextAppName = null

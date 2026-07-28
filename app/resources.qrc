@@ -3,6 +3,8 @@
         <file>res/ic_videogame_asset_white_48px.svg</file>
         <file>res/desktop_windows-48px.svg</file>
         <file>res/ic_add_to_queue_white_48px.svg</file>
+        <file>res/ic_grid_view.svg</file>
+        <file>res/ic_view_carousel.svg</file>
         <file>res/baseline-lock-24px.svg</file>
         <file>res/play_arrow_FILL1_wght700_GRAD200_opsz48.svg</file>
         <file>res/baseline-warning-24px.svg</file>
@@ -10,6 +12,7 @@
         <file>res/stop_FILL1_wght700_GRAD200_opsz48.svg</file>
         <file>res/no_app_image.png</file>
         <file>res/settings.svg</file>
+        <file>res/person.svg</file>
         <file>res/arrow_left.svg</file>
         <file>res/question_mark.svg</file>
         <file>res/moonlight.svg</file>
@@ -82,6 +85,7 @@
     <qresource prefix="/data">
         <file alias="gamecontrollerdb.txt">SDL_GameControllerDB/gamecontrollerdb.txt</file>
         <file alias="ModeSeven.ttf">ModeSeven.ttf</file>
+        <file alias="JetBrainsMono.ttf">JetBrainsMono.ttf</file>
         <file alias="egl_nv12.frag">shaders/egl_nv12.frag</file>
         <file alias="egl_opaque.frag">shaders/egl_opaque.frag</file>
         <file alias="egl_overlay.frag">shaders/egl_overlay.frag</file>
