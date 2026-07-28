@@ -62,8 +62,11 @@ Item {
         stageLabel.visible = false
         hintText.visible = false
 
-        // Hide the window now that streaming has begun
-        window.visible = false
+        // Keep a mapped surface under gamescope so focus doesn't fall back to Steam
+        // between destruction of the SDL window and sessionFinished().
+        if (SystemProperties.hasDesktopEnvironment) {
+            window.visible = false
+        }
     }
 
     function displayLaunchError(text)
