@@ -2006,7 +2006,7 @@ Item {
                     hoverEnabled: true
                     width: parent.width
                     divider: true
-                    text: qsTr("Send Guide button press to host on Select+L1+R1+B (Steam Deck)")
+                    text: qsTr("Open the host's Steam overlay on Select+L1+R1+B (Steam Deck)")
                     font.pointSize: 12
                     checked: StreamingPreferences.gamepadGuideButtonChord
                     onCheckedChanged: {
@@ -2016,7 +2016,7 @@ Item {
                     ToolTip.delay: 1000
                     ToolTip.timeout: 5000
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("The Steam Deck handles the Steam/Guide button locally, so it never reaches the host. Press Select+L1+R1+B while streaming to send a Guide button pulse to the host instead.")
+                    ToolTip.text: qsTr("The Steam Deck handles the Steam button locally, so it never reaches the host. Press Select+L1+R1+B while streaming to send Shift+Tab to the host instead. This only works while a Steam game with the overlay enabled has focus on the host.")
                 }
 
                 ToggleSwitch {
