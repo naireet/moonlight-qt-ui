@@ -199,6 +199,11 @@ bool WMUtils::isRunningDesktopEnvironment()
     // Embedded systems don't run desktop environments
     return false;
 #else
+    // Gamescope provides a window manager without a desktop environment.
+    if (qgetenv("XDG_CURRENT_DESKTOP").compare("gamescope", Qt::CaseInsensitive) == 0) {
+        return false;
+    }
+
     // On non-embedded systems, assume we have a desktop environment
     // if we have a WM running.
     return isRunningWindowManager();
