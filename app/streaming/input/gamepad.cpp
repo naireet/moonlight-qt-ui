@@ -23,6 +23,14 @@
 #define ML_HAPTIC_SIMPLE_RUMBLE     (1U << 17)
 #define ML_HAPTIC_GC_TRIGGER_RUMBLE (1U << 18)
 
+// Real Windows VK_* codes used by the Steam overlay chord
+#ifndef VK_TAB
+#define VK_TAB 0x09
+#endif
+#ifndef VK_LSHIFT
+#define VK_LSHIFT 0xA0
+#endif
+
 const int SdlInputHandler::k_ButtonMap[] = {
     A_FLAG, B_FLAG, X_FLAG, Y_FLAG,
     BACK_FLAG, SPECIAL_FLAG, PLAY_FLAG,
@@ -397,19 +405,31 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         return;
     }
 
-    // Handle Select+L1+R1+B as a host-side Guide button chord
+    // Handle Select+L1+R1+B as a host-side Steam overlay chord.
+    //
+    // Steam's overlay hotkey is handled by gameoverlayrenderer, which is injected into
+    // the game process, so this only opens the overlay when a Steam game with the overlay
+    // enabled has focus on the host. It does nothing on the desktop or in a non-Steam game.
     if (m_GamepadGuideButtonChord && state->mouseEmulationTimer == 0 &&
             state->buttons == (BACK_FLAG | LB_FLAG | RB_FLAG | B_FLAG)) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "Detected Guide button gamepad combo");
+                    "Detected Steam overlay gamepad combo");
 
-        // Pulse the Guide button on the host
-        sendGamepadState(state, SPECIAL_FLAG);
-        sendGamepadState(state);
-
-        // Clear buttons down on this gamepad
+        // Clear buttons down on this gamepad so the host doesn't see the chord
+        // held down while the keystroke lands
         LiSendMultiControllerEvent(state->index, m_GamepadMask,
                                    0, 0, 0, 0, 0, 0, 0);
+
+        // Force raise all keys to ensure that none of them interfere with the
+        // keystroke we're going to send
+        raiseAllKeys();
+
+        // Send Shift+Tab to the host. These are balanced down/up pairs sent
+        // immediately, so they're deliberately not tracked in m_KeysDown.
+        LiSendKeyboardEvent(0x8000 | VK_LSHIFT, KEY_ACTION_DOWN, MODIFIER_SHIFT);
+        LiSendKeyboardEvent(0x8000 | VK_TAB, KEY_ACTION_DOWN, MODIFIER_SHIFT);
+        LiSendKeyboardEvent(0x8000 | VK_TAB, KEY_ACTION_UP, MODIFIER_SHIFT);
+        LiSendKeyboardEvent(0x8000 | VK_LSHIFT, KEY_ACTION_UP, 0);
         return;
     }
 
