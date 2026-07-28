@@ -9,9 +9,6 @@
 // How long the Start button must be pressed to toggle mouse emulation
 #define MOUSE_EMULATION_LONG_PRESS_TIME 750
 
-// How long Start+Select must be held to send a synthetic Guide button pulse
-#define GUIDE_CHORD_HOLD_TIME 450
-
 // How long between polling the gamepad to send virtual mouse input
 #define MOUSE_EMULATION_POLLING_INTERVAL 50
 
@@ -193,25 +190,6 @@ Uint32 SdlInputHandler::mouseEmulationTimerCallback(Uint32 interval, void *param
     return interval;
 }
 
-Uint32 SdlInputHandler::guideChordTimerCallback(Uint32 interval, void *param)
-{
-    (void)interval;
-
-    auto state = reinterpret_cast<GamepadState*>(param);
-    if (state->controller == nullptr || state->inputHandler == nullptr || state->mouseEmulationTimer != 0) {
-        return 0;
-    }
-
-    if (state->buttons != (PLAY_FLAG | BACK_FLAG)) {
-        return 0;
-    }
-
-    state->guideChordSent = true;
-    state->inputHandler->sendGamepadState(state, SPECIAL_FLAG);
-    state->inputHandler->sendGamepadState(state);
-    return 0;
-}
-
 void SdlInputHandler::handleControllerAxisEvent(SDL_ControllerAxisEvent* event)
 {
     SDL_JoystickID gameControllerId = event->which;
@@ -347,10 +325,7 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         state->buttons &= ~k_ButtonMap[event->button];
 
         if (event->button == SDL_CONTROLLER_BUTTON_START) {
-            if (state->guideChordSent) {
-                state->guideChordSent = false;
-            }
-            else if (SDL_GetTicks() - state->lastStartDownTime > MOUSE_EMULATION_LONG_PRESS_TIME) {
+            if (SDL_GetTicks() - state->lastStartDownTime > MOUSE_EMULATION_LONG_PRESS_TIME) {
                 if (state->mouseEmulationTimer != 0) {
                     SDL_RemoveTimer(state->mouseEmulationTimer);
                     state->mouseEmulationTimer = 0;
@@ -390,23 +365,6 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         }
     }
 
-    if (m_GamepadGuideButtonChord && state->mouseEmulationTimer == 0) {
-        if (state->buttons == (PLAY_FLAG | BACK_FLAG) && state->guideChordTimer == 0) {
-            state->guideChordSent = false;
-            state->guideChordTimer = SDL_AddTimer(GUIDE_CHORD_HOLD_TIME,
-                                                  SdlInputHandler::guideChordTimerCallback,
-                                                  state);
-        }
-        else if (state->buttons != (PLAY_FLAG | BACK_FLAG) && state->guideChordTimer != 0) {
-            SDL_RemoveTimer(state->guideChordTimer);
-            state->guideChordTimer = 0;
-        }
-    }
-    else if (state->guideChordTimer != 0) {
-        SDL_RemoveTimer(state->guideChordTimer);
-        state->guideChordTimer = 0;
-    }
-
     // Handle Start+Select+L1+R1 as a gamepad quit combo
     if (state->buttons == (PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG) && qgetenv("NO_GAMEPAD_QUIT") != "1") {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -432,6 +390,22 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         // Toggle the stats overlay
         Session::get()->getOverlayManager().setOverlayState(Overlay::OverlayDebug,
                                                             !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
+
+        // Clear buttons down on this gamepad
+        LiSendMultiControllerEvent(state->index, m_GamepadMask,
+                                   0, 0, 0, 0, 0, 0, 0);
+        return;
+    }
+
+    // Handle Select+L1+R1+B as a host-side Guide button chord
+    if (m_GamepadGuideButtonChord && state->mouseEmulationTimer == 0 &&
+            state->buttons == (BACK_FLAG | LB_FLAG | RB_FLAG | B_FLAG)) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Detected Guide button gamepad combo");
+
+        // Pulse the Guide button on the host
+        sendGamepadState(state, SPECIAL_FLAG);
+        sendGamepadState(state);
 
         // Clear buttons down on this gamepad
         LiSendMultiControllerEvent(state->index, m_GamepadMask,
@@ -773,10 +747,6 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
     else if (event->type == SDL_CONTROLLERDEVICEREMOVED) {
         state = findStateForGamepad(event->which);
         if (state != NULL) {
-            if (state->guideChordTimer != 0) {
-                SDL_RemoveTimer(state->guideChordTimer);
-                state->guideChordTimer = 0;
-            }
             if (state->mouseEmulationTimer != 0) {
                 Session::get()->notifyMouseEmulationMode(false);
                 SDL_RemoveTimer(state->mouseEmulationTimer);
