@@ -511,7 +511,10 @@ bool PyroWaveVideoDecoder::createPyroWaveDecoder()
     decoderInfo.width = m_Width;
     decoderInfo.height = m_Height;
     decoderInfo.chroma = m_Yuv444 ? PYROWAVE_CHROMA_SUBSAMPLING_444 : PYROWAVE_CHROMA_SUBSAMPLING_420;
-    decoderInfo.fragment_path = m_Lib->pyrowave_decoder_device_prefers_fragment_path(m_PyroDevice);
+    // The fragment path renders into the planes, so it also needs renderable planes
+    decoderInfo.fragment_path = m_Lib->pyrowave_decoder_device_prefers_fragment_path(m_PyroDevice) &&
+                                findPlaneFormat(true) != nullptr;
+    m_FragmentPath = decoderInfo.fragment_path;
     res = m_Lib->pyrowave_decoder_create(&decoderInfo, &m_PyroDecoder);
     if (res != PYROWAVE_SUCCESS) {
         m_PyroDecoder = nullptr;
@@ -525,15 +528,25 @@ bool PyroWaveVideoDecoder::createPyroWaveDecoder()
     return true;
 }
 
-bool PyroWaveVideoDecoder::createSlots()
+pl_fmt PyroWaveVideoDecoder::findPlaneFormat(bool renderable)
 {
     // 10-bit streams use R16 planes: the host writes normalized UNORM values into
     // 16-bit containers (not 10-bit samples shifted into them), so the full 16 bits
     // are the colour depth. 8-bit streams use R8 planes.
     const int depth = m_TenBit ? 16 : 8;
+    int caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR;
+    if (renderable) {
+        caps |= PL_FMT_CAP_RENDERABLE;
+    }
+    return pl_find_fmt(m_Vulkan->gpu, PL_FMT_UNORM, 1, depth, depth, (pl_fmt_caps)caps);
+}
+
+bool PyroWaveVideoDecoder::createSlots()
+{
+    const int depth = m_TenBit ? 16 : 8;
     const VkFormat expectedFormat = m_TenBit ? VK_FORMAT_R16_UNORM : VK_FORMAT_R8_UNORM;
-    pl_fmt fmt = pl_find_fmt(m_Vulkan->gpu, PL_FMT_UNORM, 1, depth, depth,
-                             (pl_fmt_caps)(PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_STORABLE | PL_FMT_CAP_LINEAR));
+    const VkImageUsageFlags requiredUsage = m_FragmentPath ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : VK_IMAGE_USAGE_STORAGE_BIT;
+    pl_fmt fmt = findPlaneFormat(m_FragmentPath);
     if (fmt == nullptr) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "PyroWave: no storable, filterable %d-bit single-channel format", depth);
@@ -562,6 +575,7 @@ bool PyroWaveVideoDecoder::createSlots()
             texParams.format = fmt;
             texParams.sampleable = true;
             texParams.storable = true;
+            texParams.renderable = m_FragmentPath;
             texParams.debug_tag = PL_DEBUG_TAG;
             slot.planes[i] = pl_tex_create(m_Vulkan->gpu, &texParams);
             if (slot.planes[i] == nullptr) {
@@ -572,9 +586,10 @@ bool PyroWaveVideoDecoder::createSlots()
             VkFormat format;
             VkImageUsageFlags usage;
             slot.images[i] = pl_vulkan_unwrap(m_Vulkan->gpu, slot.planes[i], &format, &usage);
-            if (slot.images[i] == VK_NULL_HANDLE || format != expectedFormat || !(usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
+            if (slot.images[i] == VK_NULL_HANDLE || format != expectedFormat || !(usage & requiredUsage)) {
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                             "PyroWave: plane texture is not a storage %s image",
+                             "PyroWave: plane texture is not a %s %s image",
+                             m_FragmentPath ? "renderable" : "storage",
                              m_TenBit ? "R16_UNORM" : "R8_UNORM");
                 return false;
             }

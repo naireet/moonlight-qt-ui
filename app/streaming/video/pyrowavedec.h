@@ -95,6 +95,7 @@ private:
     bool createVulkanDevice(PDECODER_PARAMETERS params);
     bool createPyroWaveDecoder();
     bool createSlots();
+    pl_fmt findPlaneFormat(bool renderable);
     bool createSwapchain();
     bool holdPlane(pl_tex plane);
     StreamColorimetry currentColorimetry();
@@ -152,6 +153,7 @@ private:
     pyrowave_device_create_queue_info m_PyroQueue = {};
     pyrowave_device m_PyroDevice = nullptr;
     pyrowave_decoder m_PyroDecoder = nullptr;
+    bool m_FragmentPath = false;
 
     // Frame slots and the two timelines that order access to them. Each timeline has
     // exactly one signalling thread, so its values are always submitted in order.
