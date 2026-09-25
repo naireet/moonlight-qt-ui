@@ -198,13 +198,12 @@ jobs:
           echo "Parsed $(ls app/gui/*.qml | wc -l) QML files"
           exit $STATUS
 
-      - name: Lint QML (informational)
-        continue-on-error: true
+      - name: Lint QML against the base branch
         run: |
           QMLLINT=$(find "$QT_ROOT_DIR" -name qmllint -type f -perm -u+x | head -n1)
-          "$QMLLINT" app/gui/*.qml > qmllint.txt 2>&1 || true
-          echo "qmllint: $(grep -c '^Warning' qmllint.txt || true) warning(s), $(grep -c '^Error' qmllint.txt || true) error(s)"
-          head -n 60 qmllint.txt
+          [ -n "$QMLLINT" ] || { echo "qmllint not found under $QT_ROOT_DIR"; exit 1; }
+          git fetch -q --depth 1 origin naireet-upstream-rebase
+          scripts/qml-lint-diff.sh "$QMLLINT" FETCH_HEAD
 
       - name: Check AppImage contents
         run: scripts/check-appimage.sh build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage --pyrowave

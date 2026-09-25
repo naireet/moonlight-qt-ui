@@ -411,6 +411,16 @@ void StreamingPreferences::save()
     settings.setValue(SER_BACKGROUNDMOTIONTIER, static_cast<int>(backgroundMotionTier));
 }
 
+int StreamingPreferences::getPyroWaveRecommendedBitrate(int width, int height, int fps)
+{
+    // Intra-only wavelet coding scales with pixel rate. The anchor is a guess to be
+    // refined by A/B testing on the Deck, not a measured optimum (PyroWave's README
+    // targets ~200 Mbps at 1080p60, which this reproduces).
+    double pixelRate = (double)width * height * fps;
+    double anchor = 1280.0 * 800.0 * 60.0;
+    return (int)(100000.0 * pixelRate / anchor);
+}
+
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)
 {
     // Don't scale bitrate linearly beyond 60 FPS. It's definitely not a linear

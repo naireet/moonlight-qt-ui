@@ -104,6 +104,13 @@ SystemProperties::SystemProperties()
     hasDiscordIntegration = false;
 #endif
 
+#ifdef HAVE_PYROWAVE
+    // Built in. Whether the host and this GPU can use it is checked at stream launch.
+    supportsPyroWave = true;
+#else
+    supportsPyroWave = false;
+#endif
+
     // These will be queried asynchronously to avoid blocking the UI
     hasHardwareAcceleration = true;
     rendererAlwaysFullScreen = false;

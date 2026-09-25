@@ -24,6 +24,11 @@ public:
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
+    // A starting point for PyroWave, which needs far more bandwidth than HEVC:
+    // 100 Mbps at 1280x800 60 FPS, scaled linearly with pixels per second.
+    Q_INVOKABLE static int
+    getPyroWaveRecommendedBitrate(int width, int height, int fps);
+
     Q_INVOKABLE void save();
 
     void reload();
@@ -42,7 +47,8 @@ public:
         VCC_FORCE_H264,
         VCC_FORCE_HEVC,
         VCC_FORCE_HEVC_HDR_DEPRECATED, // Kept for backwards compatibility
-        VCC_FORCE_AV1
+        VCC_FORCE_AV1,
+        VCC_FORCE_PYROWAVE // Opt-in; never chosen by VCC_AUTO
     };
     Q_ENUM(VideoCodecConfig)
 

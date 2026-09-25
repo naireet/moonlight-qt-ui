@@ -15,6 +15,10 @@
 #include "video/slvid.h"
 #endif
 
+#ifdef HAVE_PYROWAVE
+#include "video/pyrowavedec.h"
+#endif
+
 #ifdef Q_OS_WIN32
 // Scaling the icon down on Win32 looks dreadful, so render at lower res
 #define ICON_SIZE 32
@@ -301,6 +305,24 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "V-sync %s",
                 enableVsync ? "enabled" : "disabled");
+
+    // PyroWave has its own decoder; nothing else can decode it, so there is no fallback here
+    if (videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) {
+#ifdef HAVE_PYROWAVE
+        chosenDecoder = new PyroWaveVideoDecoder(testOnly);
+        if (chosenDecoder->initialize(&params)) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "PyroWave video decoder chosen");
+            return true;
+        }
+
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "Unable to load PyroWave decoder");
+        delete chosenDecoder;
+        chosenDecoder = nullptr;
+#endif
+        return false;
+    }
 
 #ifdef HAVE_SLVIDEO
     chosenDecoder = new SLVideoDecoder(testOnly);
@@ -736,6 +758,17 @@ bool Session::initialize(QQuickWindow* qtWindow)
                 CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(m_StreamConfig.audioConfiguration));
 
     // Start with all codecs and profiles in priority order
+#ifdef HAVE_PYROWAVE
+    // PyroWave is opt-in: it is only offered to the host when explicitly selected,
+    // never by Automatic. (moonlight-common-c picks PyroWave over every other codec
+    // whenever both sides offer it, so leaving it out is the only way to opt out.)
+    if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) {
+        m_SupportedVideoFormats.append(VIDEO_FORMAT_PYROWAVE10_444);
+        m_SupportedVideoFormats.append(VIDEO_FORMAT_PYROWAVE10_420);
+        m_SupportedVideoFormats.append(VIDEO_FORMAT_PYROWAVE_444);
+        m_SupportedVideoFormats.append(VIDEO_FORMAT_PYROWAVE);
+    }
+#endif
     m_SupportedVideoFormats.append(VIDEO_FORMAT_AV1_HIGH10_444);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_AV1_MAIN10);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_H265_REXT10_444);
@@ -868,6 +901,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
         // straight to H.264 if the user asked for AV1 and the host doesn't support it.
         m_SupportedVideoFormats.removeByMask(~(VIDEO_FORMAT_MASK_AV1 | VIDEO_FORMAT_MASK_H265));
         break;
+    case StreamingPreferences::VCC_FORCE_PYROWAVE:
+        // Fall back to HEVC (the default) if the host or this device can't do PyroWave.
+        // Builds without PyroWave support never added it above, so this is just HEVC.
+        m_SupportedVideoFormats.removeByMask(~(VIDEO_FORMAT_MASK_PYROWAVE | VIDEO_FORMAT_MASK_H265));
+        break;
     }
 
     // NB: Since deprioritization puts codecs in reverse order (at the bottom of the list),
@@ -987,6 +1025,32 @@ bool Session::validateLaunch(SDL_Window* testWindow)
 
     if (m_Preferences->videoDecoderSelection == StreamingPreferences::VDS_FORCE_SOFTWARE) {
         emitLaunchWarning(tr("Your settings selection to force software decoding may cause poor streaming performance."));
+    }
+
+    if (m_SupportedVideoFormats & VIDEO_FORMAT_MASK_PYROWAVE) {
+        if (!(m_Computer->serverCodecModeSupport & SCM_PYROWAVE)) {
+            emitLaunchWarning(tr("Your host doesn't have PyroWave enabled. Streaming with HEVC instead."));
+            m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_PYROWAVE);
+        }
+        else if (getDecoderAvailability(testWindow,
+                                        m_Preferences->videoDecoderSelection,
+                                        (m_Preferences->enableHdr ? VIDEO_FORMAT_PYROWAVE10_420 : VIDEO_FORMAT_PYROWAVE),
+                                        m_StreamConfig.width,
+                                        m_StreamConfig.height,
+                                        m_StreamConfig.fps) == DecoderAvailability::None) {
+            emitLaunchWarning(tr("This device can't decode PyroWave. Streaming with HEVC instead."));
+            m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_PYROWAVE);
+        }
+        else {
+            int recommendedKbps = StreamingPreferences::getPyroWaveRecommendedBitrate(m_StreamConfig.width,
+                                                                                      m_StreamConfig.height,
+                                                                                      m_StreamConfig.fps);
+            if (m_StreamConfig.bitrate < recommendedKbps) {
+                emitLaunchWarning(tr("PyroWave needs roughly %1 Mbps at this resolution and frame rate. At %2 Mbps the picture will be noticeably softer than HEVC.")
+                                  .arg(recommendedKbps / 1000)
+                                  .arg(m_StreamConfig.bitrate / 1000));
+            }
+        }
     }
 
     if (m_SupportedVideoFormats & VIDEO_FORMAT_MASK_AV1) {

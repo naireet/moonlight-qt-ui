@@ -1502,6 +1502,14 @@ Item {
                 AutoResizingComboBox {
                     // ignore setting the index at first, and actually set it when the component is loaded
                     Component.onCompleted: {
+                        // PyroWave is only listed in builds that include its decoder
+                        if (SystemProperties.supportsPyroWave) {
+                            codecListModel.append({
+                                "text": qsTr("PyroWave (experimental)"),
+                                "val": StreamingPreferences.VCC_FORCE_PYROWAVE
+                            })
+                        }
+
                         var saved_vcc = StreamingPreferences.videoCodecConfig
 
                         // Default to Automatic (relevant if HDR is enabled,
@@ -1546,6 +1554,20 @@ Item {
                             StreamingPreferences.videoCodecConfig = codecListModel.get(currentIndex).val
                         }
                     }
+                }
+
+                Label {
+                    width: parent.width
+                    id: pyroWaveHint
+                    visible: SystemProperties.supportsPyroWave &&
+                             StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE
+                    text: qsTr("PyroWave is a low-latency codec that needs far more bandwidth than HEVC: about %1 Mbps at your current resolution and frame rate. Your host must have PyroWave enabled, otherwise HEVC is used.")
+                          .arg(Math.round(StreamingPreferences.getPyroWaveRecommendedBitrate(StreamingPreferences.width,
+                                                                                             StreamingPreferences.height,
+                                                                                             StreamingPreferences.fps) / 1000))
+                    font.pointSize: 9
+                    color: "#9aa0b0"
+                    wrapMode: Text.Wrap
                 }
 
                 Rectangle {
