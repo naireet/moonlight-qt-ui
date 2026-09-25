@@ -185,10 +185,17 @@ jobs:
           QMLCACHEGEN=$(find "$QT_ROOT_DIR" -name qmlcachegen -type f -perm -u+x | head -n1)
           [ -n "$QMLCACHEGEN" ] || { echo "qmlcachegen not found under $QT_ROOT_DIR"; exit 1; }
           OUT=$(mktemp -d)
+          parse() { "$QMLCACHEGEN" --only-bytecode --resource-path "/gui/$(basename "$1")" -o "$OUT/$(basename "$1").cpp" "$1"; }
+
+          # Negative control: the gate must reject a syntax error, or it proves nothing
+          printf 'import QtQuick\nItem {\n    width: 10 +\n}\n' > "$OUT/Broken.qml"
+          if parse "$OUT/Broken.qml" 2>/dev/null; then echo "qmlcachegen accepted broken QML"; exit 1; fi
+
           STATUS=0
           for f in app/gui/*.qml; do
-            "$QMLCACHEGEN" --only-bytecode -o "$OUT/$(basename "$f").cpp" "$f" || { echo "::error file=$f::QML parse failed"; STATUS=1; }
+            parse "$f" || { echo "::error file=$f::QML parse failed"; STATUS=1; }
           done
+          echo "Parsed $(ls app/gui/*.qml | wc -l) QML files"
           exit $STATUS
 
       - name: Lint QML (informational)
