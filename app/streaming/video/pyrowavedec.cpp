@@ -321,16 +321,23 @@ bool PyroWaveVideoDecoder::createVulkanDevice(PDECODER_PARAMETERS params)
     // Features PyroWave's decoder shaders use, requested on top of libplacebo's own
     // required/recommended set. libplacebo only enables the ones the device supports,
     // so the result is checked below.
-    VkPhysicalDeviceVulkan13Features features13 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+    VkPhysicalDeviceVulkan13Features features13 = {};
+    features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.subgroupSizeControl = VK_TRUE;
     features13.computeFullSubgroups = VK_TRUE;
-    VkPhysicalDeviceVulkan12Features features12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13 };
+    VkPhysicalDeviceVulkan12Features features12 = {};
+    features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.pNext = &features13;
     features12.timelineSemaphore = VK_TRUE;
     features12.shaderFloat16 = VK_TRUE;
     features12.storageBuffer8BitAccess = VK_TRUE;
-    VkPhysicalDeviceVulkan11Features features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &features12 };
+    VkPhysicalDeviceVulkan11Features features11 = {};
+    features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    features11.pNext = &features12;
     features11.storageBuffer16BitAccess = VK_TRUE;
-    VkPhysicalDeviceFeatures2 features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &features11 };
+    VkPhysicalDeviceFeatures2 features = {};
+    features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features.pNext = &features11;
     features.features.shaderInt16 = VK_TRUE;
     features.features.shaderStorageImageExtendedFormats = VK_TRUE;
 
@@ -399,19 +406,23 @@ bool PyroWaveVideoDecoder::createVulkanDevice(PDECODER_PARAMETERS params)
     // Hand PyroWave the same instance and device. The create infos describe what
     // libplacebo actually enabled; the queue list is restricted to graphics queue 0
     // so Granite never looks up any other queue.
-    m_PyroAppInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
+    m_PyroAppInfo = {};
+    m_PyroAppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     m_PyroAppInfo.apiVersion = m_PlVkInstance->api_version;
-    m_PyroInstanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+    m_PyroInstanceInfo = {};
+    m_PyroInstanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     m_PyroInstanceInfo.pApplicationInfo = &m_PyroAppInfo;
     m_PyroInstanceInfo.enabledExtensionCount = (uint32_t)m_PlVkInstance->num_extensions;
     m_PyroInstanceInfo.ppEnabledExtensionNames = m_PlVkInstance->extensions;
 
-    m_PyroQueueCreateInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+    m_PyroQueueCreateInfo = {};
+    m_PyroQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     m_PyroQueueCreateInfo.queueFamilyIndex = (uint32_t)m_Vulkan->queue_graphics.index;
     m_PyroQueueCreateInfo.queueCount = 1;
     m_PyroQueueCreateInfo.pQueuePriorities = &m_PyroQueuePriority;
 
-    m_PyroDeviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+    m_PyroDeviceInfo = {};
+    m_PyroDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     m_PyroDeviceInfo.pNext = m_Vulkan->features;
     m_PyroDeviceInfo.queueCreateInfoCount = 1;
     m_PyroDeviceInfo.pQueueCreateInfos = &m_PyroQueueCreateInfo;
