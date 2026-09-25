@@ -369,8 +369,12 @@ pyrowave {
 
     DEFINES += HAVE_PYROWAVE
     INCLUDEPATH += $$PWD/../pyrowave/pyrowave
-    SOURCES += streaming/video/pyrowaveloader.cpp
-    HEADERS += streaming/video/pyrowaveloader.h
+    SOURCES += \
+        streaming/video/pyrowaveloader.cpp \
+        streaming/video/pyrowavedec.cpp
+    HEADERS += \
+        streaming/video/pyrowaveloader.h \
+        streaming/video/pyrowavedec.h
     LIBS += -ldl
 }
 config_EGL {
