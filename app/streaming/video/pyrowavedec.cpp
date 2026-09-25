@@ -5,6 +5,7 @@
 
 #include <SDL_vulkan.h>
 
+#include <QByteArray>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -153,7 +154,7 @@ PyroWaveVideoDecoder::~PyroWaveVideoDecoder()
 
     if (m_GlobalVideoStats.renderedFrames != 0) {
         char stats[1024];
-        stringifyVideoStats(m_GlobalVideoStats, stats, sizeof(stats));
+        stringifyVideoStats(m_GlobalVideoStats, m_GlobalPyroStats, stats, sizeof(stats));
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "\nGlobal video stats\n------------------\n%s", stats);
     }
 
@@ -228,6 +229,31 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     m_Lib = PyroWaveLibrary::get();
     if (m_Lib == nullptr) {
         return false;
+    }
+
+    // Acceptance policy for frames that arrive incomplete (Wi-Fi loss). A frame is
+    // decoded if its two coarsest wavelet bands are intact and more than this fraction
+    // of its blocks arrived; otherwise the previous picture stays up for a frame.
+    // Upstream's default is 0.9, which throws away most salvaged frames: a prefix
+    // truncated at the first lost packet rarely carries 90% of the blocks. Missing
+    // blocks decode as zero (softer detail), so 0.5 trades a little blur for fewer
+    // repeated frames. Tunable for A/B tests without rebuilding.
+    {
+        QByteArray ratioEnv = qgetenv("PYROWAVE_MIN_BLOCK_RATIO");
+        bool ok = false;
+        float ratio = ratioEnv.isEmpty() ? 0.5f : ratioEnv.toFloat(&ok);
+        if (!ratioEnv.isEmpty() && (!ok || ratio < 0.0f || ratio > 1.0f)) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "PyroWave: ignoring invalid PYROWAVE_MIN_BLOCK_RATIO=%s (expected 0.0 to 1.0)",
+                        ratioEnv.constData());
+            ratio = 0.5f;
+        }
+        m_MinBlockRatio = ratio;
+    }
+    if (!m_TestOnly) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "PyroWave: incomplete frames are shown with %d intact coarse bands and > %.2f of blocks",
+                    m_PristineBands, m_MinBlockRatio);
     }
 
     if (!createVulkanDevice(params) || !createPyroWaveDecoder() || !createSlots()) {
@@ -770,6 +796,7 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
     // A partial frame (see DECODE_UNIT::isPartial) ends at an arbitrary byte, so the
     // declared count can exceed what is present; stop at the first incomplete packet.
     const uint32_t declaredPackets = readLe32(data);
+    uint32_t pushedPackets = 0;
     size_t pos = 4;
     for (uint32_t i = 0; i < declaredPackets && pos + 4 <= length; i++) {
         const uint32_t packetSize = readLe32(data + pos);
@@ -789,12 +816,26 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
                         du->frameNumber, (int)res);
             m_LoggedPushFailure = true;
         }
+        else if (res == PYROWAVE_SUCCESS) {
+            pushedPackets++;
+        }
         pos += packetSize;
     }
 
-    // Upstream's default acceptance for incomplete frames: the two coarsest bands intact
-    // and more than 90% of blocks present. Frames below that keep the previous picture.
-    if (!m_Lib->pyrowave_decoder_decode_is_ready_with_sideband(m_PyroDecoder, true, 2, 0.9f, nullptr, 0)) {
+    const bool ready = m_Lib->pyrowave_decoder_decode_is_ready_with_sideband(m_PyroDecoder, true,
+                                                                             m_PristineBands, m_MinBlockRatio,
+                                                                             nullptr, 0);
+    if (du->isPartial) {
+        m_ActivePyroStats.partialPacketsPushed += pushedPackets;
+        m_ActivePyroStats.partialPacketsDeclared += declaredPackets;
+        if (ready) {
+            m_ActivePyroStats.partialShown++;
+        }
+        else {
+            m_ActivePyroStats.partialRejected++;
+        }
+    }
+    if (!ready) {
         return DR_OK;
     }
 
@@ -1222,6 +1263,9 @@ void PyroWaveVideoDecoder::updateStatsWindow()
         VIDEO_STATS lastTwoWndStats = {};
         addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
         addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
+        PyroWaveStats lastTwoWndPyroStats = {};
+        addPyroWaveStats(m_LastPyroStats, lastTwoWndPyroStats);
+        addPyroWaveStats(m_ActivePyroStats, lastTwoWndPyroStats);
 
         char* text = Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug);
         int maxLength = Session::get()->getOverlayManager().getOverlayMaxTextLength();
@@ -1229,16 +1273,39 @@ void PyroWaveVideoDecoder::updateStatsWindow()
             stringifyVideoStatsLite(lastTwoWndStats, text, maxLength);
         }
         else {
-            stringifyVideoStats(lastTwoWndStats, text, maxLength);
+            stringifyVideoStats(lastTwoWndStats, lastTwoWndPyroStats, text, maxLength);
         }
         Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
     }
 
     addVideoStats(m_ActiveWndVideoStats, m_GlobalVideoStats);
+    addPyroWaveStats(m_ActivePyroStats, m_GlobalPyroStats);
 
     SDL_memcpy(&m_LastWndVideoStats, &m_ActiveWndVideoStats, sizeof(m_ActiveWndVideoStats));
     SDL_zero(m_ActiveWndVideoStats);
     m_ActiveWndVideoStats.measurementStartUs = LiGetMicroseconds();
+    m_LastPyroStats = m_ActivePyroStats;
+    m_ActivePyroStats = {};
+}
+
+void PyroWaveVideoDecoder::addPyroWaveStats(const PyroWaveStats& src, PyroWaveStats& dst)
+{
+    dst.partialShown += src.partialShown;
+    dst.partialRejected += src.partialRejected;
+    dst.partialPacketsPushed += src.partialPacketsPushed;
+    dst.partialPacketsDeclared += src.partialPacketsDeclared;
+}
+
+int PyroWaveVideoDecoder::formatPyroWaveStatus(const PyroWaveStats& stats, char* output, int length)
+{
+    const uint32_t partial = stats.partialShown + stats.partialRejected;
+    if (partial == 0) {
+        return snprintf(output, length, "Partial frames: none (acceptance > %.2f of blocks)\n", m_MinBlockRatio);
+    }
+    return snprintf(output, length,
+                    "Partial frames: %u shown, %u held back (acceptance > %.2f of blocks), %.0f%% of their packets arrived\n",
+                    stats.partialShown, stats.partialRejected, m_MinBlockRatio,
+                    stats.partialPacketsDeclared ? 100.0 * stats.partialPacketsPushed / stats.partialPacketsDeclared : 0.0);
 }
 
 void PyroWaveVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
@@ -1309,7 +1376,7 @@ int PyroWaveVideoDecoder::formatHdrStatus(char* output, int length)
                     targetColor.transfer == PL_COLOR_TRC_PQ ? " (HDR10 passthrough)" : " (tone mapped to SDR)");
 }
 
-void PyroWaveVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, int length)
+void PyroWaveVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, const PyroWaveStats& pyroStats, char* output, int length)
 {
     int offset = 0;
     int ret;
@@ -1334,6 +1401,12 @@ void PyroWaveVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output,
         offset += ret;
 
         ret = formatHdrStatus(&output[offset], length - offset);
+        if (ret < 0 || ret >= length - offset) {
+            return;
+        }
+        offset += ret;
+
+        ret = formatPyroWaveStatus(pyroStats, &output[offset], length - offset);
         if (ret < 0 || ret >= length - offset) {
             return;
         }

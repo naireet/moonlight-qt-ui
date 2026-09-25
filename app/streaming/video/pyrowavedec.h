@@ -83,6 +83,15 @@ private:
         pl_color_repr repr;
     };
 
+    // Incomplete-frame counters. A frame is "partial" when moonlight-common-c salvaged
+    // only a prefix of it (DECODE_UNIT::isPartial); packets are PyroWave packets.
+    struct PyroWaveStats {
+        uint32_t partialShown;
+        uint32_t partialRejected;
+        uint64_t partialPacketsPushed;
+        uint64_t partialPacketsDeclared;
+    };
+
     bool createVulkanDevice(PDECODER_PARAMETERS params);
     bool createPyroWaveDecoder();
     bool createSlots();
@@ -102,7 +111,7 @@ private:
 
     void updateStatsWindow();
     void addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst);
-    void stringifyVideoStats(VIDEO_STATS& stats, char* output, int length);
+    void stringifyVideoStats(VIDEO_STATS& stats, const PyroWaveStats& pyroStats, char* output, int length);
     void stringifyVideoStatsLite(VIDEO_STATS& stats, char* output, int length);
     int formatHdrStatus(char* output, int length);
 
@@ -167,6 +176,17 @@ private:
     uint32_t m_LastSequenceColorimetry = UINT32_MAX;
     int m_LastPushedFrameNumber = 0;
     bool m_LoggedPushFailure = false;
+
+    // Acceptance policy for incomplete frames (see initialize())
+    int m_PristineBands = 2;
+    float m_MinBlockRatio = 0.5f;
+
+    // PyroWave-specific counters, windowed like VIDEO_STATS (decoder thread only)
+    PyroWaveStats m_ActivePyroStats = {};
+    PyroWaveStats m_LastPyroStats = {};
+    PyroWaveStats m_GlobalPyroStats = {};
+    static void addPyroWaveStats(const PyroWaveStats& src, PyroWaveStats& dst);
+    int formatPyroWaveStatus(const PyroWaveStats& stats, char* output, int length);
 
     // Overlays, following PlVkRenderer's staging model
     SDL_SpinLock m_OverlayLock = 0;
