@@ -39,6 +39,17 @@ export LDFLAGS=-flto=auto
 
 echo Configuring the project
 pushd $BUILD_FOLDER
+# PyroWave is opt-in: set PYROWAVE_LIBRARY to a built libpyrowave-shared.so.0
+# (see pyrowave/build-pyrowave.sh). Moonlight dlopen()s it at runtime, so it is
+# bundled explicitly below rather than discovered by linuxdeploy.
+PYROWAVE_QMAKE_ARGS=
+PYROWAVE_DEPLOY_ARGS=
+if [ -n "$PYROWAVE_LIBRARY" ]; then
+  [ -f "$PYROWAVE_LIBRARY" ] || fail "PYROWAVE_LIBRARY does not exist: $PYROWAVE_LIBRARY"
+  PYROWAVE_QMAKE_ARGS="CONFIG+=pyrowave"
+  PYROWAVE_DEPLOY_ARGS="--library=$PYROWAVE_LIBRARY"
+fi
+
 # Building with Wayland support will cause linuxdeploy to include libwayland-client.so in the AppImage.
 # Since we always use the host implementation of EGL, this can cause libEGL_mesa.so to fail to load due
 # to missing symbols from the host's version of libwayland-client.so that aren't present in the older
@@ -46,7 +57,7 @@ pushd $BUILD_FOLDER
 # work even in X11. To avoid this, we will disable Wayland support for the AppImage.
 #
 # We disable DRM support because linuxdeploy doesn't bundle the appropriate libraries for Qt EGLFS.
-qmake6 $SOURCE_ROOT/moonlight-qt.pro CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE || fail "Qmake failed!"
+qmake6 $SOURCE_ROOT/moonlight-qt.pro CONFIG+=disable-wayland CONFIG+=disable-libdrm $PYROWAVE_QMAKE_ARGS PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE || fail "Qmake failed!"
 popd
 
 echo Compiling Moonlight in $BUILD_CONFIG configuration
@@ -130,6 +141,7 @@ pushd $INSTALLER_FOLDER
 # bundled last-resort copy for hosts without libva).
 VERSION=$VERSION $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
   --library=/usr/local/lib/libSDL3.so.0 \
+  $PYROWAVE_DEPLOY_ARGS \
   --plugin qt \
   --custom-apprun $APP_RUN \
   --exclude-library=libva.so* \

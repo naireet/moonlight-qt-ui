@@ -116,7 +116,10 @@ jobs:
       - name: Build libplacebo
         working-directory: deps/libplacebo
         run: |
-          git apply ../../app/deploy/linux/appimage/*.patch
+          git apply ../../app/deploy/linux/appimage/libplacebo-*.patch
+          # The gamescope WSI crash fix (ValveSoftware/gamescope#2261) must be in every build
+          grep -q '\.internallySynchronizedQueues = false' src/vulkan/context.c || \
+            { echo "libplacebo internally-synchronized-queues patch is not applied"; exit 1; }
           meson setup build -Dvulkan=enabled -Dopengl=disabled -Ddemos=false
           ninja -C build
           sudo ninja install -C build
@@ -153,6 +156,9 @@ jobs:
           make -j$(nproc)
           sudo make install
 
+      - name: Build PyroWave
+        run: pyrowave/build-pyrowave.sh "$DEP_ROOT" "$PWD"/app/deploy/linux/appimage/pyrowave-*.patch
+
       - name: Install linuxdeploy
         working-directory: dep_root/bin
         run: |
@@ -163,7 +169,7 @@ jobs:
       - name: Build Binaries
         run: |
           sudo ldconfig
-          scripts/build-appimage.sh
+          PYROWAVE_LIBRARY="$DEP_ROOT/lib/libpyrowave-shared.so.0" scripts/build-appimage.sh
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v6
@@ -172,3 +178,31 @@ jobs:
           path: build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage
           compression-level: 0
           if-no-files-found: error
+
+      - name: Check QML syntax
+        run: |
+          # A green qmake build proves nothing about QML: it is embedded in the qrc unparsed.
+          QMLCACHEGEN=$(find "$QT_ROOT_DIR" -name qmlcachegen -type f -perm -u+x | head -n1)
+          [ -n "$QMLCACHEGEN" ] || { echo "qmlcachegen not found under $QT_ROOT_DIR"; exit 1; }
+          OUT=$(mktemp -d)
+          STATUS=0
+          for f in app/gui/*.qml; do
+            "$QMLCACHEGEN" --only-bytecode -o "$OUT/$(basename "$f").cpp" "$f" || { echo "::error file=$f::QML parse failed"; STATUS=1; }
+          done
+          exit $STATUS
+
+      - name: Lint QML (informational)
+        continue-on-error: true
+        run: |
+          QMLLINT=$(find "$QT_ROOT_DIR" -name qmllint -type f -perm -u+x | head -n1)
+          "$QMLLINT" app/gui/*.qml > qmllint.txt 2>&1 || true
+          echo "qmllint: $(grep -c '^Warning' qmllint.txt || true) warning(s), $(grep -c '^Error' qmllint.txt || true) error(s)"
+          head -n 60 qmllint.txt
+
+      - name: Check AppImage contents
+        run: scripts/check-appimage.sh build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage --pyrowave
+
+      - name: Smoke-test the UI
+        run: |
+          sudo apt-get install -y xvfb >/dev/null
+          scripts/smoke-appimage.sh build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage 20
