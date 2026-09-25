@@ -25,6 +25,18 @@ Item {
     signal languageChanged()
 
     property bool syncingStreamingProfileUi: false
+
+    // PyroWave has its own bitrate. While it's the selected codec, the bitrate slider
+    // shows and edits StreamingPreferences.pyroWaveBitrateKbps instead of bitrateKbps.
+    readonly property bool pyroWaveBitrateActive: SystemProperties.supportsPyroWave &&
+                                                  StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE
+    // Mirrors StreamingPreferences::k_PyroWaveMaxBitrateKbps / k_PyroWaveBitrateWarningKbps
+    readonly property int pyroWaveMaxBitrateKbps: 1000000
+    readonly property int pyroWaveBitrateWarningKbps: 650000
+
+    function displayedBitrateKbps() {
+        return pyroWaveBitrateActive ? StreamingPreferences.pyroWaveBitrateKbps : StreamingPreferences.bitrateKbps
+    }
     property var streamingProfileNamesModel: []
     property var streamingProfileIdsModel: []
     property int currentSectionIndex: 0
@@ -244,8 +256,8 @@ Item {
                 }
             }
 
-            slider.value = Qt.binding(function() { return StreamingPreferences.bitrateKbps })
-            bitrateTitle.text = qsTr("Video bitrate: %1 Mbps").arg(StreamingPreferences.bitrateKbps / 1000.0)
+            slider.value = Qt.binding(function() { return settingsPage.displayedBitrateKbps() })
+            bitrateTitle.text = qsTr("Video bitrate: %1 Mbps").arg(settingsPage.displayedBitrateKbps() / 1000.0)
 
             vsyncCheck.checked = Qt.binding(function() { return StreamingPreferences.enableVsync })
             framePacingCheck.checked = Qt.binding(function() { return StreamingPreferences.enableVsync && StreamingPreferences.framePacing })
@@ -659,7 +671,7 @@ Item {
                                                                                                               StreamingPreferences.height,
                                                                                                               StreamingPreferences.fps,
                                                                                                               StreamingPreferences.enableYUV444);
-                                    slider.value = StreamingPreferences.bitrateKbps
+                                    slider.value = settingsPage.displayedBitrateKbps()
                                 }
                             }
 
@@ -827,7 +839,7 @@ Item {
                                                                                                               StreamingPreferences.height,
                                                                                                               StreamingPreferences.fps,
                                                                                                               StreamingPreferences.enableYUV444);
-                                    slider.value = StreamingPreferences.bitrateKbps
+                                    slider.value = settingsPage.displayedBitrateKbps()
                                 }
                             }
 
@@ -1066,11 +1078,13 @@ Item {
                 Slider {
                     id: slider
 
-                    value: StreamingPreferences.bitrateKbps
+                    value: settingsPage.displayedBitrateKbps()
 
                     stepSize: 500
                     from : 500
-                    to: StreamingPreferences.unlockBitrate ? 500000 : 150000
+                    // The HEVC range is unchanged; PyroWave gets its own, higher range
+                    to: settingsPage.pyroWaveBitrateActive ? settingsPage.pyroWaveMaxBitrateKbps :
+                                                             (StreamingPreferences.unlockBitrate ? 500000 : 150000)
 
                     // SnapAlways (rather than SnapOnRelease) quantizes value to stepSize
                     // *during* the drag, not just on release. With the huge 500-150000/500000
@@ -1088,11 +1102,19 @@ Item {
                         if (settingsPage.syncingStreamingProfileUi) {
                             return
                         }
-                        StreamingPreferences.bitrateKbps = value
+                        if (settingsPage.pyroWaveBitrateActive) {
+                            StreamingPreferences.pyroWaveBitrateKbps = value
+                        }
+                        else {
+                            StreamingPreferences.bitrateKbps = value
+                        }
                     }
 
                     onMoved: {
-                        StreamingPreferences.autoAdjustBitrate = false
+                        // Auto-adjust only concerns the normal bitrate
+                        if (!settingsPage.pyroWaveBitrateActive) {
+                            StreamingPreferences.autoAdjustBitrate = false
+                        }
                     }
 
                     Component.onCompleted: {
@@ -1100,6 +1122,17 @@ Item {
                         languageChanged.connect(valueChanged)
                     }
                 }
+                }
+
+                Label {
+                    width: parent.width
+                    id: pyroWaveBitrateWarning
+                    visible: settingsPage.pyroWaveBitrateActive &&
+                             StreamingPreferences.pyroWaveBitrateKbps > settingsPage.pyroWaveBitrateWarningKbps
+                    text: qsTr("This PyroWave bitrate exceeds gigabit Ethernet headroom after FEC; Wi-Fi is far lower.")
+                    font.pointSize: 9
+                    color: "#e0a050"
+                    wrapMode: Text.Wrap
                 }
 
                 SettingRow {
@@ -1551,7 +1584,21 @@ Item {
                     // ::onActivated must be used, as it only listens for when the index is changed by a human
                     onActivated : {
                         if (enabled) {
-                            StreamingPreferences.videoCodecConfig = codecListModel.get(currentIndex).val
+                            var newVcc = codecListModel.get(currentIndex).val
+                            if (newVcc === StreamingPreferences.VCC_FORCE_PYROWAVE ||
+                                    StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE) {
+                                // Switching to or from PyroWave swaps the slider between the two
+                                // bitrates (and ranges). Suppress its write-back so a range clamp
+                                // can never overwrite the other codec's bitrate.
+                                var wasSyncing = settingsPage.syncingStreamingProfileUi
+                                settingsPage.syncingStreamingProfileUi = true
+                                StreamingPreferences.videoCodecConfig = newVcc
+                                slider.value = settingsPage.displayedBitrateKbps()
+                                settingsPage.syncingStreamingProfileUi = wasSyncing
+                            }
+                            else {
+                                StreamingPreferences.videoCodecConfig = newVcc
+                            }
                         }
                     }
                 }
@@ -1561,7 +1608,7 @@ Item {
                     id: pyroWaveHint
                     visible: SystemProperties.supportsPyroWave &&
                              StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE
-                    text: qsTr("PyroWave is a low-latency codec that needs far more bandwidth than HEVC: about %1 Mbps at your current resolution and frame rate. Your host must have PyroWave enabled, otherwise HEVC is used.")
+                    text: qsTr("PyroWave is a low-latency codec that needs far more bandwidth than HEVC: about %1 Mbps at your current resolution and frame rate. Your host must have PyroWave enabled, otherwise HEVC is used. While PyroWave is selected, the bitrate slider sets PyroWave's own bitrate; your normal bitrate is kept for the other codecs.")
                           .arg(Math.round(StreamingPreferences.getPyroWaveRecommendedBitrate(StreamingPreferences.width,
                                                                                              StreamingPreferences.height,
                                                                                              StreamingPreferences.fps) / 1000))
@@ -1657,7 +1704,7 @@ Item {
                                                                                                           StreamingPreferences.height,
                                                                                                           StreamingPreferences.fps,
                                                                                                           StreamingPreferences.enableYUV444);
-                                slider.value = StreamingPreferences.bitrateKbps
+                                slider.value = settingsPage.displayedBitrateKbps()
                             }
                         }
                     }
@@ -1684,8 +1731,8 @@ Item {
                             return
                         }
                         StreamingPreferences.unlockBitrate = checked
-                        StreamingPreferences.bitrateKbps = Math.min(StreamingPreferences.bitrateKbps, slider.to)
-                        slider.value = StreamingPreferences.bitrateKbps
+                        StreamingPreferences.bitrateKbps = Math.min(StreamingPreferences.bitrateKbps, checked ? 500000 : 150000)
+                        slider.value = settingsPage.displayedBitrateKbps()
                     }
 
                     ToolTip.delay: 1000

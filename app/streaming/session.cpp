@@ -988,6 +988,20 @@ bool Session::initialize(QQuickWindow* qtWindow)
         // Video format is now locked in
         m_StreamConfig.supportedVideoFormats = m_SupportedVideoFormats.front();
 
+        // PyroWave has its own bitrate setting. It only applies when PyroWave is actually
+        // being requested; if validateLaunch() fell back, the normal (HEVC) bitrate stays.
+        if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_PYROWAVE) {
+            m_StreamConfig.bitrate = m_Preferences->pyroWaveBitrateKbps;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Using the PyroWave bitrate: %d kbps",
+                        m_StreamConfig.bitrate);
+        }
+        else if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "PyroWave unavailable; using the standard bitrate: %d kbps",
+                        m_StreamConfig.bitrate);
+        }
+
         // Populate decoder-dependent properties.
         // Must be done after validateLaunch() since m_StreamConfig is finalized.
         ret = populateDecoderProperties(testWindow);
@@ -1042,13 +1056,18 @@ bool Session::validateLaunch(SDL_Window* testWindow)
             m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_PYROWAVE);
         }
         else {
+            const int pyroWaveKbps = m_Preferences->pyroWaveBitrateKbps;
             int recommendedKbps = StreamingPreferences::getPyroWaveRecommendedBitrate(m_StreamConfig.width,
                                                                                       m_StreamConfig.height,
                                                                                       m_StreamConfig.fps);
-            if (m_StreamConfig.bitrate < recommendedKbps) {
+            if (pyroWaveKbps > StreamingPreferences::k_PyroWaveBitrateWarningKbps) {
+                emitLaunchWarning(tr("A PyroWave bitrate of %1 Mbps exceeds gigabit Ethernet headroom after FEC; Wi-Fi is far lower.")
+                                  .arg(pyroWaveKbps / 1000));
+            }
+            else if (pyroWaveKbps < recommendedKbps) {
                 emitLaunchWarning(tr("PyroWave needs roughly %1 Mbps at this resolution and frame rate. At %2 Mbps the picture will be noticeably softer than HEVC.")
                                   .arg(recommendedKbps / 1000)
-                                  .arg(m_StreamConfig.bitrate / 1000));
+                                  .arg(pyroWaveKbps / 1000));
             }
         }
     }
@@ -1761,6 +1780,7 @@ bool Session::startConnectionAsync()
     // If the user has adjusted the bitrate from default, we'll assume they really wanted
     // that value and not second guess them.
     if (m_Preferences->enableYUV444 &&
+        !(m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_PYROWAVE) &&
         !(m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_YUV444) &&
         m_StreamConfig.bitrate == StreamingPreferences::getDefaultBitrate(m_StreamConfig.width,
                                                                           m_StreamConfig.height,

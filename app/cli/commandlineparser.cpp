@@ -504,6 +504,17 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         preferences->videoCodecConfig = mapValue(m_VideoCodecMap, parser.getChoiceOptionValue("video-codec"));
     }
 
+#ifdef HAVE_PYROWAVE
+    // With PyroWave, --bitrate sets PyroWave's own bitrate and leaves the normal one alone
+    if (preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE && parser.isSet("bitrate")) {
+        preferences->pyroWaveBitrateKbps = parser.getIntOption("bitrate");
+        if (!inRange(preferences->pyroWaveBitrateKbps, 500, StreamingPreferences::k_PyroWaveMaxBitrateKbps)) {
+            fprintf(stderr, "Warning: PyroWave bitrate is out of the supported range (500 - %d Kbps). Performance may suffer!\n",
+                    StreamingPreferences::k_PyroWaveMaxBitrateKbps);
+        }
+    }
+#endif
+
     // Resolve --video-decoder option
     if (parser.isSet("video-decoder")) {
         preferences->videoDecoderSelection = mapValue(m_VideoDecoderMap, parser.getChoiceOptionValue("video-decoder"));

@@ -15,6 +15,7 @@
 #define SER_HEIGHT "height"
 #define SER_FPS "fps"
 #define SER_BITRATE "bitrate"
+#define SER_PYROWAVE_BITRATE "pyrowavebitrate"
 #define SER_UNLOCK_BITRATE "unlockbitrate"
 #define SER_AUTOADJUSTBITRATE "autoadjustbitrate"
 #define SER_FULLSCREEN "fullscreen"
@@ -142,6 +143,7 @@ void StreamingPreferences::reload()
     fps = settings.value(SER_FPS, 60).toInt();
     enableYUV444 = settings.value(SER_YUV444, false).toBool();
     bitrateKbps = settings.value(SER_BITRATE, getDefaultBitrate(width, height, fps, enableYUV444)).toInt();
+    pyroWaveBitrateKbps = settings.value(SER_PYROWAVE_BITRATE, getPyroWaveDefaultBitrate(width, height, fps)).toInt();
     unlockBitrate = settings.value(SER_UNLOCK_BITRATE, false).toBool();
     autoAdjustBitrate = settings.value(SER_AUTOADJUSTBITRATE, true).toBool();
     enableVsync = settings.value(SER_VSYNC, true).toBool();
@@ -364,6 +366,7 @@ void StreamingPreferences::save()
     settings.setValue(SER_HEIGHT, height);
     settings.setValue(SER_FPS, fps);
     settings.setValue(SER_BITRATE, bitrateKbps);
+    settings.setValue(SER_PYROWAVE_BITRATE, pyroWaveBitrateKbps);
     settings.setValue(SER_UNLOCK_BITRATE, unlockBitrate);
     settings.setValue(SER_AUTOADJUSTBITRATE, autoAdjustBitrate);
     settings.setValue(SER_VSYNC, enableVsync);
@@ -413,12 +416,22 @@ void StreamingPreferences::save()
 
 int StreamingPreferences::getPyroWaveRecommendedBitrate(int width, int height, int fps)
 {
-    // Intra-only wavelet coding scales with pixel rate. The anchor is a guess to be
-    // refined by A/B testing on the Deck, not a measured optimum (PyroWave's README
-    // targets ~200 Mbps at 1080p60, which this reproduces).
+    // Intra-only wavelet coding scales roughly with pixel rate. The 100 Mbps at
+    // 1280x800@60 anchor is a guess to be refined by A/B testing on the Deck, not a
+    // measured optimum (PyroWave's README targets ~200 Mbps at 1080p60, which this
+    // reproduces). Linear scaling overshoots badly at high resolutions (4K120 would
+    // be ~1.6 Gbps, more than the link carries; the host's 4K120 measurements favour
+    // roughly 500-800 Mbps), so the recommendation is capped where a gigabit link
+    // runs out of headroom.
     double pixelRate = (double)width * height * fps;
     double anchor = 1280.0 * 800.0 * 60.0;
-    return (int)(100000.0 * pixelRate / anchor);
+    double recommended = 100000.0 * pixelRate / anchor;
+    return (int)qMin(recommended, (double)k_PyroWaveBitrateWarningKbps);
+}
+
+int StreamingPreferences::getPyroWaveDefaultBitrate(int width, int height, int fps)
+{
+    return qBound(50000, getPyroWaveRecommendedBitrate(width, height, fps), 600000);
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)

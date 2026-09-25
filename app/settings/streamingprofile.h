@@ -24,6 +24,7 @@ public:
     int height;
     int fps;
     int bitrateKbps;
+    int pyroWaveBitrateKbps;
     bool unlockBitrate;
     bool autoAdjustBitrate;
     bool enableVsync;

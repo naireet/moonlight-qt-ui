@@ -25,9 +25,19 @@ public:
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
     // A starting point for PyroWave, which needs far more bandwidth than HEVC:
-    // 100 Mbps at 1280x800 60 FPS, scaled linearly with pixels per second.
+    // 100 Mbps at 1280x800 60 FPS, scaled linearly with pixel rate and capped at
+    // k_PyroWaveBitrateWarningKbps. Used for the settings hint and launch warning.
     Q_INVOKABLE static int
     getPyroWaveRecommendedBitrate(int width, int height, int fps);
+
+    // Default for pyroWaveBitrateKbps: the recommendation clamped to [50, 600] Mbps
+    Q_INVOKABLE static int
+    getPyroWaveDefaultBitrate(int width, int height, int fps);
+
+    // PyroWave bitrate slider limit, and the level above which a gigabit link has no
+    // headroom left once FEC and audio are added
+    static constexpr int k_PyroWaveMaxBitrateKbps = 1000000;
+    static constexpr int k_PyroWaveBitrateWarningKbps = 650000;
 
     Q_INVOKABLE void save();
 
@@ -171,6 +181,8 @@ public:
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
     Q_PROPERTY(int bitrateKbps MEMBER bitrateKbps NOTIFY bitrateChanged)
+    // Separate from bitrateKbps so switching codecs never overwrites either value
+    Q_PROPERTY(int pyroWaveBitrateKbps MEMBER pyroWaveBitrateKbps NOTIFY pyroWaveBitrateChanged)
     Q_PROPERTY(bool unlockBitrate MEMBER unlockBitrate NOTIFY unlockBitrateChanged)
     Q_PROPERTY(bool autoAdjustBitrate MEMBER autoAdjustBitrate NOTIFY autoAdjustBitrateChanged)
     Q_PROPERTY(bool enableVsync MEMBER enableVsync NOTIFY enableVsyncChanged)
@@ -223,6 +235,7 @@ public:
     int height;
     int fps;
     int bitrateKbps;
+    int pyroWaveBitrateKbps;
     bool unlockBitrate;
     bool autoAdjustBitrate;
     bool enableVsync;
@@ -272,6 +285,7 @@ public:
 signals:
     void displayModeChanged();
     void bitrateChanged();
+    void pyroWaveBitrateChanged();
     void unlockBitrateChanged();
     void autoAdjustBitrateChanged();
     void enableVsyncChanged();

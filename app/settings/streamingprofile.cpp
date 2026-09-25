@@ -9,6 +9,7 @@ constexpr auto SER_WIDTH = "width";
 constexpr auto SER_HEIGHT = "height";
 constexpr auto SER_FPS = "fps";
 constexpr auto SER_BITRATE = "bitrate";
+constexpr auto SER_PYROWAVE_BITRATE = "pyrowavebitrate";
 constexpr auto SER_UNLOCK_BITRATE = "unlockbitrate";
 constexpr auto SER_AUTOADJUSTBITRATE = "autoadjustbitrate";
 constexpr auto SER_VSYNC = "vsync";
@@ -42,6 +43,7 @@ StreamingProfile::StreamingProfile()
     , height(720)
     , fps(60)
     , bitrateKbps(StreamingPreferences::getDefaultBitrate(width, height, fps, false))
+    , pyroWaveBitrateKbps(StreamingPreferences::getPyroWaveDefaultBitrate(width, height, fps))
     , unlockBitrate(false)
     , autoAdjustBitrate(true)
     , enableVsync(true)
@@ -81,6 +83,8 @@ StreamingProfile::StreamingProfile(QSettings& settings)
     enableYUV444 = settings.value(SER_YUV444, enableYUV444).toBool();
     bitrateKbps = settings.value(SER_BITRATE,
                                  StreamingPreferences::getDefaultBitrate(width, height, fps, enableYUV444)).toInt();
+    pyroWaveBitrateKbps = settings.value(SER_PYROWAVE_BITRATE,
+                                         StreamingPreferences::getPyroWaveDefaultBitrate(width, height, fps)).toInt();
     videoDecoderSelection = static_cast<StreamingPreferences::VideoDecoderSelection>(
                 settings.value(SER_VIDEODEC, static_cast<int>(videoDecoderSelection)).toInt());
     windowMode = static_cast<StreamingPreferences::WindowMode>(
@@ -100,6 +104,7 @@ bool StreamingProfile::operator==(const StreamingProfile& other) const
             height == other.height &&
             fps == other.fps &&
             bitrateKbps == other.bitrateKbps &&
+            pyroWaveBitrateKbps == other.pyroWaveBitrateKbps &&
             unlockBitrate == other.unlockBitrate &&
             autoAdjustBitrate == other.autoAdjustBitrate &&
             enableVsync == other.enableVsync &&
@@ -128,6 +133,7 @@ void StreamingProfile::serialize(QSettings& settings) const
     settings.setValue(SER_HEIGHT, height);
     settings.setValue(SER_FPS, fps);
     settings.setValue(SER_BITRATE, bitrateKbps);
+    settings.setValue(SER_PYROWAVE_BITRATE, pyroWaveBitrateKbps);
     settings.setValue(SER_UNLOCK_BITRATE, unlockBitrate);
     settings.setValue(SER_AUTOADJUSTBITRATE, autoAdjustBitrate);
     settings.setValue(SER_VSYNC, enableVsync);
@@ -149,6 +155,7 @@ void StreamingProfile::applyTo(StreamingPreferences* prefs) const
     prefs->height = height;
     prefs->fps = fps;
     prefs->bitrateKbps = bitrateKbps;
+    prefs->pyroWaveBitrateKbps = pyroWaveBitrateKbps;
     prefs->unlockBitrate = unlockBitrate;
     prefs->autoAdjustBitrate = autoAdjustBitrate;
     prefs->enableVsync = enableVsync;
@@ -170,6 +177,7 @@ void StreamingProfile::captureFrom(const StreamingPreferences* prefs)
     height = prefs->height;
     fps = prefs->fps;
     bitrateKbps = prefs->bitrateKbps;
+    pyroWaveBitrateKbps = prefs->pyroWaveBitrateKbps;
     unlockBitrate = prefs->unlockBitrate;
     autoAdjustBitrate = prefs->autoAdjustBitrate;
     enableVsync = prefs->enableVsync;

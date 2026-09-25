@@ -40,6 +40,9 @@ static void applyProfileToPreferences(StreamingPreferences* prefs, const Streami
     if (previousValues.bitrateKbps != profile.bitrateKbps) {
         emitPreferenceSignal(prefs, "bitrateChanged");
     }
+    if (previousValues.pyroWaveBitrateKbps != profile.pyroWaveBitrateKbps) {
+        emitPreferenceSignal(prefs, "pyroWaveBitrateChanged");
+    }
     if (previousValues.unlockBitrate != profile.unlockBitrate) {
         emitPreferenceSignal(prefs, "unlockBitrateChanged");
     }
@@ -99,6 +102,7 @@ StreamingProfileManager::StreamingProfileManager(QQmlEngine* qmlEngine)
 
     connect(prefs, &StreamingPreferences::displayModeChanged, this, [this]() { syncActiveProfileFromPreferences(); });
     connect(prefs, &StreamingPreferences::bitrateChanged, this, [this]() { syncActiveProfileFromPreferences(); });
+    connect(prefs, &StreamingPreferences::pyroWaveBitrateChanged, this, [this]() { syncActiveProfileFromPreferences(); });
     connect(prefs, &StreamingPreferences::unlockBitrateChanged, this, [this]() { syncActiveProfileFromPreferences(); });
     connect(prefs, &StreamingPreferences::autoAdjustBitrateChanged, this, [this]() { syncActiveProfileFromPreferences(); });
     connect(prefs, &StreamingPreferences::enableVsyncChanged, this, [this]() { syncActiveProfileFromPreferences(); });
