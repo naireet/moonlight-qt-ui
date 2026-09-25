@@ -366,6 +366,8 @@ bool PyroWaveVideoDecoder::createVulkanDevice(PDECODER_PARAMETERS params)
     features.pNext = &features11;
     features.features.shaderInt16 = VK_TRUE;
     features.features.shaderStorageImageExtendedFormats = VK_TRUE;
+    // PyroWave writes the planes through format-less storage images
+    features.features.shaderStorageImageWriteWithoutFormat = VK_TRUE;
 
     // The device is created by libplacebo, so it goes through exactly the same
     // (patched) queue setup as the HEVC Vulkan renderer. That is what keeps this
@@ -399,9 +401,11 @@ bool PyroWaveVideoDecoder::createVulkanDevice(PDECODER_PARAMETERS params)
     auto enabled12 = findFeatureStruct<VkPhysicalDeviceVulkan12Features>(
         m_Vulkan->features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
     if (m_Vulkan->api_version < VK_API_VERSION_1_3 || enabled13 == nullptr || !enabled13->subgroupSizeControl ||
-            enabled12 == nullptr || !enabled12->timelineSemaphore) {
+            enabled12 == nullptr || !enabled12->timelineSemaphore ||
+            !m_Vulkan->features->features.shaderStorageImageWriteWithoutFormat) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "PyroWave: device lacks Vulkan 1.3 subgroup size control or timeline semaphores");
+                     "PyroWave: device lacks Vulkan 1.3 subgroup size control, timeline semaphores "
+                     "or format-less storage image writes");
         return false;
     }
 
@@ -1376,17 +1380,30 @@ int PyroWaveVideoDecoder::formatHdrStatus(char* output, int length)
         targetColor = m_HdrStatusTarget;
     }
 
+    const char* chroma = m_Yuv444 ? "4:4:4" : "4:2:0";
+    const char* depth = m_TenBit ? "10-bit" : "8-bit";
+
     if (sourceColor.transfer != PL_COLOR_TRC_PQ) {
-        return snprintf(output, length, "HDR: off (%s %s, full range) -> %s/%s output\n",
-                        primariesName(sourceColor.primaries), transferName(sourceColor.transfer),
+        return snprintf(output, length, "HDR: off | PyroWave %s %s %s %s full | output %s/%s\n",
+                        depth, chroma, transferName(sourceColor.transfer), primariesName(sourceColor.primaries),
                         primariesName(targetColor.primaries), transferName(targetColor.transfer));
     }
 
+    // Only set from LiGetHdrMetadata(); without it libplacebo assumes generic HDR10 values
+    const bool metadataReceived = sourceColor.hdr.prim.red.x != 0 || sourceColor.hdr.max_luma != 0 ||
+                                  sourceColor.hdr.max_cll != 0 || sourceColor.hdr.max_fall != 0;
+    char metadata[128];
+    if (metadataReceived) {
+        snprintf(metadata, sizeof(metadata), "metadata received: mastering %.4f-%.0f nits, MaxCLL %.0f, MaxFALL %.0f",
+                 sourceColor.hdr.min_luma, sourceColor.hdr.max_luma, sourceColor.hdr.max_cll, sourceColor.hdr.max_fall);
+    }
+    else {
+        snprintf(metadata, sizeof(metadata), "no metadata from host (HDR10 defaults)");
+    }
+
     return snprintf(output, length,
-                    "HDR: PQ %s | mastering %.4f-%.0f nits, MaxCLL %.0f, MaxFALL %.0f | output %s/%s%s\n",
-                    primariesName(sourceColor.primaries),
-                    sourceColor.hdr.min_luma, sourceColor.hdr.max_luma,
-                    sourceColor.hdr.max_cll, sourceColor.hdr.max_fall,
+                    "HDR: on | PyroWave %s %s PQ %s full | %s | output %s/%s%s\n",
+                    depth, chroma, primariesName(sourceColor.primaries), metadata,
                     primariesName(targetColor.primaries), transferName(targetColor.transfer),
                     targetColor.transfer == PL_COLOR_TRC_PQ ? " (HDR10 passthrough)" : " (tone mapped to SDR)");
 }

@@ -156,20 +156,29 @@ For each run, record from the overlay:
 
 ### HDR checks (Deck OLED, HDR enabled in Deck display settings)
 
+Use the **same HDR content for both codecs**, streamed over HEVC HDR and then
+PyroWave HDR. Good repeatable sources are the **Windows HDR Calibration app**
+(its black-level, peak and saturation test patterns) and a **PQ gradient /
+near-black ramp** test image or video played full screen on the host, plus one
+game scene you know well.
+
 1. **Black level:** a dark scene or a black loading screen should be true black,
    not grey, and match HEVC. Raised blacks point to a range mismatch.
-2. **Dark-gradient banding:** a dark sky or fog gradient. Compare the steps and
-   blockiness between the two codecs at matched bitrate.
-3. **Small bright highlights, 1% and 10% windows:** a small bright object (~1% of
-   the screen: sun, lamp, muzzle flash) and a larger one (~10%: a window, a bright
-   UI panel) on dark surroundings. Check peak brightness, clipping, and whether the
-   whole picture dims when the highlight appears (tone-mapping pumping). Compare
-   with HEVC.
+2. **Dark-gradient banding:** the near-black ramp, or a dark sky or fog gradient.
+   Compare the steps and blockiness between the two codecs at matched bitrate.
+3. **Highlight clipping, 1% and 10% windows:** the calibration app's peak pattern,
+   or a small bright object (~1% of the screen: sun, lamp, muzzle flash) and a
+   larger one (~10%: a window, a bright UI panel) on dark surroundings. Check peak
+   brightness, where detail clips, and whether the whole picture dims when the
+   highlight appears (tone-mapping pumping). Compare with HEVC.
 4. **Red/blue text fringing:** saturated red and blue text or thin UI lines on a
    dark background (4:2:0 chroma). Colour bleeding or a shifted colour edge points
-   to chroma siting; compare with HEVC, then with 4:4:4.
-5. The overlay's `HDR:` line should say `output BT.2020/PQ (HDR10 passthrough)`,
-   with the host's mastering values.
+   to chroma siting; compare with HEVC, then with 4:4:4. PyroWave 4:2:0 uses
+   centre siting; 4:4:4 has none of this, so prefer it when bandwidth allows.
+5. The overlay's `HDR:` line should read
+   `HDR: on | PyroWave 10-bit 4:2:0 PQ BT.2020 full | metadata received: ... | output BT.2020/PQ (HDR10 passthrough)`.
+   `no metadata from host` means libplacebo is using generic HDR10 values, and
+   `tone mapped to SDR` means gamescope didn't offer an HDR10 surface.
 
 ### Wi-Fi checks
 
