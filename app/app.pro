@@ -359,6 +359,20 @@ libplacebo {
         SOURCES += streaming/video/ffmpeg-renderers/plvk_objc.mm
     }
 }
+pyrowave {
+    # Opt-in with CONFIG+=pyrowave. PyroWave presents through libplacebo's Vulkan device,
+    # and libpyrowave-shared is dlopen()ed at runtime, so only its C API header is needed here.
+    !linux|!libplacebo {
+        error(PyroWave support requires Linux and libplacebo)
+    }
+    message(PyroWave decoder support enabled)
+
+    DEFINES += HAVE_PYROWAVE
+    INCLUDEPATH += $$PWD/../pyrowave/pyrowave
+    SOURCES += streaming/video/pyrowaveloader.cpp
+    HEADERS += streaming/video/pyrowaveloader.h
+    LIBS += -ldl
+}
 config_EGL {
     message(EGL renderer selected)
 
