@@ -70,13 +70,26 @@ The existing Deck build and its shortcut stay untouched.
 
 - **Settings → Video codec → PyroWave (experimental).** A hint under the list
   shows the bitrate PyroWave needs at the current resolution and frame rate: a
-  starting point of 100 Mbps at 1280×800@60, scaled with pixel rate.
+  starting point of 100 Mbps at 1280×800@60, scaled with pixel rate and capped at
+  650 Mbps. The anchor is a guess to be tuned in the A/B.
+- **PyroWave has its own bitrate.** While PyroWave is selected, the bitrate slider
+  shows and edits the PyroWave value, with a range up to 1000 Mbps. Your normal
+  (HEVC) bitrate, its 150/500 Mbps limits and its auto-adjust behaviour are kept
+  unchanged for the other codecs. Switching codec never overwrites either value.
+  The PyroWave default is the recommendation clamped to 50–600 Mbps. Above 650 Mbps
+  you get a non-blocking warning: that exceeds gigabit Ethernet headroom after FEC,
+  and Wi-Fi is far lower.
+- At launch the PyroWave bitrate is used only if PyroWave is actually requested.
+  If the stream falls back to HEVC, it uses your normal bitrate. The log says which
+  one was used (`Using the PyroWave bitrate: ...` or
+  `PyroWave unavailable; using the standard bitrate: ...`).
 - **HDR** and **YUV 4:4:4** use the existing toggles. With HDR on, the stream is
   10-bit and becomes BT.2020/PQ whenever the host display is in HDR mode.
 - If the host doesn't advertise PyroWave, or this device can't start the decoder,
   you get a warning at launch and the stream falls back to HEVC. You also get a
-  warning when the bitrate is below the recommendation.
-- CLI: `moonlight stream <host> <app> --video-codec PyroWave`.
+  warning when the PyroWave bitrate is below the recommendation.
+- CLI: `moonlight stream <host> <app> --video-codec PyroWave [--bitrate <kbps>]`.
+  With PyroWave, `--bitrate` sets the PyroWave bitrate.
 
 Environment variables (set them in `run.sh`):
 
@@ -143,6 +156,17 @@ silently are the most common reason an A/B doesn't mean what you think it does.
 **PyroWave 10-bit 4:2:0 against HEVC Main10 4:2:0 at the same bitrate**, HDR on for
 both, YUV 4:4:4 off for both. Repeat at two bitrates: the HEVC setting you normally
 use, and the PyroWave recommendation from the settings hint.
+
+### Best-setting comparison (separate from the headline)
+
+**Each codec at its own best setting**, labelled as such: PyroWave 10-bit 4:2:0 at
+a high bitrate (e.g. the recommendation, or as high as your link sustains without
+drops) against HEVC Main10 4:2:0 at the bitrate you normally use. This answers
+"which should I actually play with?", while the matched-bitrate headline answers
+"which codec is more efficient?". Record both bitrates next to the results, and
+don't mix these numbers with the headline ones.
+
+### 4:4:4
 
 **4:4:4 is a separate, labelled comparison**: PyroWave 10-bit 4:4:4 against HEVC
 10-bit 4:4:4, if the host offers it. Don't mix it into the headline numbers.
