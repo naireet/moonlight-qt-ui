@@ -1,0 +1,31 @@
+From: Dimitris Zagorakis <logins.zagorakis@gmail.com>
+Subject: [PATCH] Reject packets shorter than their header in the bitstream parser
+
+A block packet whose header says payload_words = 0 made push_packet() spin
+forever when its block index had already been seen: decode_packet() returns
+success for a duplicate block without looking at the size, and the loop then
+advances by zero bytes. 16 bytes of malformed input hang the caller's thread.
+
+Vulkan-decoder hunk of dimizago/pyrowave@9f2ab7c2, rebased onto
+Themaister/pyrowave@89f7e47d. The metal/ hunk of that commit targets the
+D3D12 fork's copy of the parser and is not needed here.
+---
+diff --git a/pyrowave_decoder.cpp b/pyrowave_decoder.cpp
+--- a/pyrowave_decoder.cpp
++++ b/pyrowave_decoder.cpp
+@@ -214,6 +214,15 @@ bool Decoder::Impl::push_packet(const void *data_, size_t size)
+ 
+ 		size_t packet_size = header->payload_words * sizeof(uint32_t);
+ 
++		// A packet cannot be shorter than its own header. payload_words == 0 would not
++		// advance the loop below, and a repeated block index returns success without
++		// consuming anything, so it would spin forever.
++		if (packet_size < sizeof(*header))
++		{
++			LOGE("payload_words is not large enough.\n");
++			return false;
++		}
++
+ 		if (packet_size > size)
+ 		{
+ 			LOGE("Packet header states %zu bytes, but only %zu bytes left to parse.\n", packet_size, size);
