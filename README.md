@@ -13,6 +13,7 @@ You can follow development on our [Discord server](https://moonlight-stream.org/
 ## Features
  - Hardware accelerated video decoding on Windows, Mac, and Linux
  - H.264, HEVC, and AV1 codec support (AV1 requires Sunshine and a supported host GPU)
+ - Experimental, opt-in PyroWave codec in this fork's Linux AppImage (see [docs/pyrowave.md](docs/pyrowave.md))
  - YUV 4:4:4 support (Sunshine only)
  - HDR streaming support
  - 7.1 surround sound audio support
