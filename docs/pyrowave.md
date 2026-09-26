@@ -122,6 +122,48 @@ Packet-aligned framing (one PyroWave packet per RTP shard, so every received sha
 is decodable) would help Wi-Fi a lot. It needs a new capability bit on both ends
 and is deliberately **not** implemented yet.
 
+## HDR rendering path
+
+PyroWave HDR goes through the same libplacebo swapchain as HEVC HDR through
+`PlVkRenderer`. The whole point is that the client adds nothing of its own:
+
+- **No panel-specific peaks.** The client passes BT.2020 PQ with the host's
+  mastering metadata (primaries, min/max luminance, MaxCLL, MaxFALL) straight to
+  the swapchain via `pl_swapchain_colorspace_hint()`. libplacebo forwards it with
+  `vkSetHdrMetadataEXT` and uses exactly that metadata as the render target's
+  colour space. Source and target are therefore identical, and libplacebo
+  performs no tone or gamut mapping. Gamescope and the display (the Deck OLED
+  panel, or a docked TV in HGiG mode) do the only mapping. There are no peak
+  constants anywhere in the client. This holds for the internal panel and for a
+  docked output alike.
+- **Metadata parity with HEVC.** The mapping from `LiGetHdrMetadata()` matches
+  what the FFmpeg decoder attaches for HEVC: primaries/50000, max luminance,
+  min luminance/10000 (`PL_COLOR_HDR_BLACK` when 0), MaxCLL, MaxFALL. It is re-read
+  every frame, and the swapchain is re-hinted when it changes mid-stream.
+  (HEVC gets there through FFmpeg side data and `pl_map_avframe()`, so there is no
+  shared helper to call. The logic was mirrored rather than routed through that
+  path, and HEVC's code is untouched.)
+- **Render parameters:** `pl_render_fast_params`, the same as `PlVkRenderer`:
+  - no upscaler or downscaler filter (libplacebo's built-in bilinear sampling);
+  - no plane upscaler (bilinear chroma upsampling);
+  - no dithering, no debanding, no sigmoidization;
+  - no peak detection;
+  - default colour-map parameters, which are inactive here since source and target
+    match.
+- **Scaling and small highlights.**
+  - Streaming at the output resolution (1280×800 on the panel, 3840×2160 on a 4K
+    dock) involves **no scaling**, so no filter touches highlights.
+  - Streaming 4K to the 800p panel means libplacebo downscales ~2.7× with bilinear
+    sampling. That can make isolated small highlights shimmer or drop out, exactly
+    as it does for HEVC through `PlVkRenderer`.
+  - For highlight comparisons, stream at the output's native resolution.
+- **4:2:0 chroma** is upsampled bilinearly with centre siting. It affects colour
+  edges, not luma peaks. 4:4:4 avoids it altogether.
+- Valve's own Steam Remote Play PyroWave client streaming HDR to this Deck shows
+  that gamescope HDR works on this Deck for *a* client. It isn't an AppImage and
+  says nothing about this build's swapchain, and nothing here relies on it. The
+  log lines below answer that for this build.
+
 ## What to check in the log
 
 With the launcher above, `moonlight.log` should contain:
@@ -190,11 +232,16 @@ game scene you know well.
    not grey, and match HEVC. Raised blacks point to a range mismatch.
 2. **Dark-gradient banding:** the near-black ramp, or a dark sky or fog gradient.
    Compare the steps and blockiness between the two codecs at matched bitrate.
-3. **Highlight clipping, 1% and 10% windows:** the calibration app's peak pattern,
-   or a small bright object (~1% of the screen: sun, lamp, muzzle flash) and a
-   larger one (~10%: a window, a bright UI panel) on dark surroundings. Check peak
-   brightness, where detail clips, and whether the whole picture dims when the
-   highlight appears (tone-mapping pumping). Compare with HEVC.
+3. **Small bright highlight test, 1% and 10% windows on black:** show a white
+   window covering ~1% of the screen and then ~10%, on pure black. Use the Windows
+   HDR Calibration app's patterns or an equivalent PQ test image. Compare HEVC and
+   PyroWave for **visible peak brightness** of each window, for halos or softening
+   around the 1% window (wavelet coding can soften small highlights, the pixels
+   that reach peak under HGiG), and for whether the black around it stays black.
+   Stream at the output's native resolution for this test (see "HDR rendering
+   path"). Then check the same in a game: a sun, lamp or muzzle flash (~1%) and a
+   bright window or UI panel (~10%). Note where detail clips and whether the whole
+   picture dims when the highlight appears (tone-mapping pumping).
 4. **Red/blue text fringing:** saturated red and blue text or thin UI lines on a
    dark background (4:2:0 chroma). Colour bleeding or a shifted colour edge points
    to chroma siting; compare with HEVC, then with 4:4:4. PyroWave 4:2:0 uses
@@ -203,6 +250,9 @@ game scene you know well.
    `HDR: on | PyroWave 10-bit 4:2:0 PQ BT.2020 full | metadata received: ... | output BT.2020/PQ (HDR10 passthrough)`.
    `no metadata from host` means libplacebo is using generic HDR10 values, and
    `tone mapped to SDR` means gamescope didn't offer an HDR10 surface.
+
+Repeat the HDR checks on a docked HDR TV if you use one: with the TV in HGiG
+mode, gamescope and the TV do the mapping, and the client behaves the same.
 
 ### Wi-Fi checks
 
