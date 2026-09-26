@@ -179,7 +179,12 @@ With the launcher above, `moonlight.log` should contain:
   `Failed to connect to gamescope socket` or a *"non-Gamescope swapchain"* popup
   means HDR can't work. That affects HEVC HDR just the same.
 - `PyroWave: bitstream colorimetry ... differs from the negotiated ...` means the
-  host is signalling different colours from what was agreed.
+  PyroWave sequence header (primaries/transfer/matrix/range/siting bits) disagrees
+  with what was negotiated. Rendering always follows the negotiated values. Stock
+  pyrowave (89f7e47d) leaves those bits at 0 (BT.709/full/centre), so on HDR
+  streams this warning appears with "the host may not be signalling colorimetry at
+  all" unless the host fills the bits in. That's a host-side cue, not a client
+  fault.
 - `Actual receive buffer size: N`. Linux reports double the usable size. Values
   around 425984 mean `net.core.rmem_max` is at the stock 212992, which can drop
   packets on large PyroWave frames.
@@ -188,10 +193,18 @@ With the launcher above, `moonlight.log` should contain:
 
 Run the normal build and the PyroWave build (see above) against the same host, the
 same game scene and the same network position. Turn on the performance overlay
-(Select+L1+R1+X) and **write down the effective settings from the overlay before
-every run**: the codec line (e.g. `PyroWave 10-bit 4:2:0 HDR` or `HEVC 10-bit HDR`),
-resolution, FPS, bitrate, and for PyroWave the `HDR:` line. Settings that fell back
-silently are the most common reason an A/B doesn't mean what you think it does.
+(Select+L1+R1+X) and **write down the effective settings immediately before every
+run**, from the overlay and log rather than from what you think you selected:
+
+- codec, chroma and bit depth: e.g. `PyroWave 10-bit 4:2:0 HDR`, or `HEVC 10-bit HDR`
+  (HEVC shows `4:4:4` only when it is 4:4:4, so no suffix means 4:2:0);
+- range and HDR state: for PyroWave, the `HDR:` line
+  (`HDR: on | PyroWave 10-bit 4:2:0 PQ BT.2020 full | metadata received ...`);
+- resolution, FPS and bitrate: the overlay bitrate, plus `Using the PyroWave bitrate`
+  or `Video bitrate` in the log.
+
+Settings that fell back silently are the most common reason an A/B doesn't mean
+what you think it does.
 
 ### Headline comparison
 
