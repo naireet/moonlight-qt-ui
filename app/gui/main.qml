@@ -193,6 +193,12 @@ ApplicationWindow {
         Keys.onHangupPressed: {
             settingsButton.clicked()
         }
+
+        // Gamepad Y sends Key_Call instead so the reconnect screen can
+        // tell it apart from Start; everywhere else it still means settings.
+        Keys.onCallPressed: {
+            settingsButton.clicked()
+        }
     }
 
     // This timer keeps us polling for 5 minutes of inactivity

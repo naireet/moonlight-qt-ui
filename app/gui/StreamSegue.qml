@@ -16,19 +16,22 @@ Item {
     property bool isResume : false
     property bool quitAfter : false
 
-    // Auto-reconnect state. When a running stream drops (see
-    // Session::isConnectionLost()), this segue stays on screen in a
+    // Auto-reconnect state. When a stream that was actually working drops
+    // (see Session::isConnectionLost()), this segue stays on screen in a
     // "reconnecting" mode driven by a StreamReconnector, then swaps in a
     // fresh Session and runs the normal start path again to resume.
-    // reconnectDeadline is non-zero from the drop until a stream is
-    // connected again, so failed resume attempts in between (e.g. the host
-    // hasn't noticed the old session is gone yet) just keep retrying.
+    // reconnectDeadline is non-zero from the drop until a resumed stream has
+    // stayed up for healthyStreamTimer's interval, so attempts that fail in
+    // between (host hasn't dropped the old session yet, no video, etc.) keep
+    // retrying against the same deadline instead of restarting it.
     property bool reconnecting : false
     property bool reconnectQuitting : false
     property var reconnector : null
     property double reconnectDeadline : 0
     property string reconnectHostName : ""
     property string lostErrorText : ""
+    property bool connected : false
+    property bool streamHealthy : false
 
     // The finished Session is parked here until its cleanup emits
     // readyForDeletion, since it must not be garbage collected before then
@@ -75,8 +78,10 @@ Item {
 
     function connectionStarted()
     {
-        // A stream is up again, so any reconnect countdown is over
-        reconnectDeadline = 0
+        // Only a stream that stays up past the initial video timeouts counts
+        // as working (see healthyStreamTimer)
+        connected = true
+        healthyStreamTimer.restart()
 
         // Hide the UI contents so the user doesn't
         // see them briefly when we pop off the StackView
@@ -180,6 +185,7 @@ Item {
     {
         // Hook up our signals
         connectSession()
+        connected = false
 
         // Ensure the SystemProperties async thread is finished,
         // since it may currently be using the SDL video subsystem
@@ -212,18 +218,29 @@ Item {
     // in) reconnect mode instead of finishing the stream.
     function tryStartReconnect()
     {
+        var wasHealthy = streamHealthy
+        healthyStreamTimer.stop()
+        streamHealthy = false
+
         if (!session || StreamingPreferences.autoReconnectTimeout <= 0) {
             return false
         }
 
-        if (session.isConnectionLost()) {
-            // A running stream dropped: start a fresh countdown, keeping the
-            // error to show if we end up giving up
+        if (reconnectDeadline <= 0) {
+            // Only a network drop of a stream that was actually working
+            // starts reconnecting. Failures right after starting (e.g. no
+            // video because of a firewall) show their error as before.
+            if (!wasHealthy || !session.isConnectionLost()) {
+                return false
+            }
+
+            // Keep the error to show if we end up giving up
             lostErrorText = streamSegueErrorDialog.text
             reconnectDeadline = Date.now() + StreamingPreferences.autoReconnectTimeout * 1000
         }
-        else if (reconnectDeadline <= 0) {
-            // Normal end of a stream
+        else if (connected && !session.isConnectionLost()) {
+            // A resume attempt was ended on purpose (disconnect combo)
+            reconnectDeadline = 0
             return false
         }
         else if (Date.now() >= reconnectDeadline) {
@@ -285,6 +302,7 @@ Item {
     {
         reconnectTimer.stop()
         reconnecting = false
+        reconnectQuitting = false
         reconnectDeadline = 0
         if (reconnector) {
             reconnector.stop()
@@ -351,19 +369,24 @@ Item {
         finishStream(0)
     }
 
+    // Swallow every key while reconnecting so nothing reaches main.qml's
+    // StackView navigation (settings, back) underneath this screen
     Keys.onPressed: {
-        if (!reconnecting || reconnectQuitting) {
+        if (!reconnecting && !reconnectQuitting) {
+            return
+        }
+
+        event.accepted = true
+        if (reconnectQuitting) {
             return
         }
 
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
             stopReconnect()
-            event.accepted = true
         }
-        // Gamepad Y arrives as Key_Hangup (see SdlGamepadKeyNavigation)
-        else if (event.key === Qt.Key_Hangup || event.key === Qt.Key_Y) {
+        // Gamepad Y arrives as Key_Call (see SdlGamepadKeyNavigation)
+        else if (event.key === Qt.Key_Call || event.key === Qt.Key_Y) {
             quitFromReconnect()
-            event.accepted = true
         }
     }
 
@@ -372,6 +395,16 @@ Item {
         interval: 1000
         repeat: true
         onTriggered: updateReconnectCountdown()
+    }
+
+    Timer {
+        id: healthyStreamTimer
+        // Comfortably past moonlight-common-c's initial no-video timeouts
+        interval: 15000
+        onTriggered: {
+            streamHealthy = true
+            reconnectDeadline = 0
+        }
     }
 
     StackView.onDeactivating: {
@@ -389,7 +422,10 @@ Item {
         // Hide the toolbar before we start loading
         window.streamActive = true
 
-        startSession()
+        // Only start once, in case this segue is ever re-activated
+        if (!streamLoader.active) {
+            startSession()
+        }
     }
 
     Timer {
