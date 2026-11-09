@@ -1,5 +1,6 @@
 #include "appmodel.h"
 
+#include "backend/gamemode.h"
 #include "settings/streamingprofilemanager.h"
 
 #include <algorithm>
@@ -503,6 +504,17 @@ void AppModel::commitFavoriteOrder()
     }
 
     m_ComputerManager->clientSideAttributeUpdated(m_Computer);
+}
+
+bool AppModel::isGameModeAvailable()
+{
+    return GameMode::isAvailable();
+}
+
+int AppModel::addAppToGameMode(int appIndex)
+{
+    Q_ASSERT(appIndex < m_VisibleApps.count());
+    return GameMode::requestAdd(m_Computer, { m_VisibleApps.at(appIndex) }, false);
 }
 
 void AppModel::handleComputerStateChanged(NvComputer* computer)

@@ -52,6 +52,10 @@ public:
 
     Q_INVOKABLE void commitFavoriteOrder();
 
+    Q_INVOKABLE bool isGameModeAvailable();
+
+    Q_INVOKABLE int addAppToGameMode(int appIndex);
+
     QVariant data(const QModelIndex &index, int role) const override;
 
     int rowCount(const QModelIndex &parent) const override;

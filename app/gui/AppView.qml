@@ -739,6 +739,20 @@ CenteredGridView {
                     ToolTip.visible: hovered
                 }
 
+                // Hands this app to the Decky Game Mode plugin as a Steam
+                // shortcut. Only offered when the plugin is installed and
+                // we're running inside SteamOS Game Mode -- re-checked each
+                // time the menu opens since the plugin can be installed
+                // while Moonlight is running.
+                property bool gameModeAvailable: false
+                onAboutToShow: gameModeAvailable = appModel.isGameModeAvailable()
+
+                NavigableMenuItem {
+                    text: qsTr("Add to Game Mode")
+                    visible: appContextMenu.gameModeAvailable
+                    onTriggered: gameModeToast.show(appModel.addAppToGameMode(model.index))
+                }
+
                 // Captured once at this scope (not inside the Repeater
                 // below, where "model" instead refers to the Repeater's own
                 // profile-list model) so the profile-picker items below can
@@ -1063,6 +1077,10 @@ CenteredGridView {
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.Wrap
         }
+    }
+
+    GameModeToast {
+        id: gameModeToast
     }
 
     NavigableMessageDialog {

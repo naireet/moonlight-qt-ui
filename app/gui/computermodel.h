@@ -41,6 +41,11 @@ public:
 
     Q_INVOKABLE void wakeComputer(int computerIndex);
 
+    Q_INVOKABLE bool isGameModeAvailable();
+
+    // Sends every non-hidden app on the host to the Game Mode plugin
+    Q_INVOKABLE int addAllAppsToGameMode(int computerIndex);
+
     Q_INVOKABLE void renameComputer(int computerIndex, QString name);
 
     Q_INVOKABLE Session* createSessionForCurrentGame(int computerIndex);

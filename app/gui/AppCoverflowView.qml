@@ -787,6 +787,16 @@ Item {
                         ToolTip.visible: hovered
                     }
 
+                    // Same as AppView.qml's "Add to Game Mode" item
+                    property bool gameModeAvailable: false
+                    onAboutToShow: gameModeAvailable = appModel.isGameModeAvailable()
+
+                    NavigableMenuItem {
+                        text: qsTr("Add to Game Mode")
+                        visible: appContextMenu.gameModeAvailable
+                        onTriggered: gameModeToast.show(appModel.addAppToGameMode(model.index))
+                    }
+
                     // Captured once at this scope (not inside the Repeater
                     // below, where "model" instead refers to the Repeater's
                     // own profile-list model) so the profile-picker items
@@ -886,6 +896,10 @@ Item {
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.Wrap
         }
+    }
+
+    GameModeToast {
+        id: gameModeToast
     }
 
     NavigableMessageDialog {
