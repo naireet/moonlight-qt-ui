@@ -340,6 +340,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Add other arguments and options
     parser.addPositionalArgument("host", "Host computer name, UUID, or IP address", "<host>");
     parser.addPositionalArgument("app", "App to stream", "\"<app>\"");
+    parser.addValueOption("app-uuid", "app UUID");
 
     parser.addFlagOption("720",  "1280x720 resolution");
     parser.addFlagOption("1080", "1920x1080 resolution");
@@ -521,6 +522,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         parser.showError("App not provided");
     }
     m_AppName = parser.positionalArguments().at(2);
+    m_AppUuid = parser.value("app-uuid");
 }
 
 QString StreamCommandLineParser::getHost() const
@@ -531,6 +533,11 @@ QString StreamCommandLineParser::getHost() const
 QString StreamCommandLineParser::getAppName() const
 {
     return m_AppName;
+}
+
+QString StreamCommandLineParser::getAppUuid() const
+{
+    return m_AppUuid;
 }
 
 ListCommandLineParser::ListCommandLineParser()

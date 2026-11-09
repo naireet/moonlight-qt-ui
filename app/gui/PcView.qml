@@ -35,6 +35,7 @@ FocusScope {
     property bool hostActionsPaired: false
     property bool hostActionsWakeable: false
     property string hostActionsDetails: ""
+    property bool hostActionsGameMode: false
 
     function openHostActions(idx, name, online, paired, wakeable, details) {
         // Grab a single clean snapshot of the screen for the dialog's
@@ -53,6 +54,7 @@ FocusScope {
         hostActionsPaired = paired
         hostActionsWakeable = wakeable
         hostActionsDetails = details
+        hostActionsGameMode = computerModel.isGameModeAvailable()
         pcContextMenuLoader.item.open()
     }
 
@@ -995,6 +997,39 @@ FocusScope {
                     }
                 }
 
+                // Sends every (non-hidden) app on this host to the Decky
+                // Game Mode plugin, which skips Steam-owned titles itself.
+                // Only shown with the plugin installed under SteamOS Game
+                // Mode (see GameMode::isAvailable()); works from the cached
+                // app list, so the host doesn't need to be online.
+                Button {
+                    id: addToGameModeButton
+                    Layout.fillWidth: true
+                    text: qsTr("Add all non-Steam apps to Game Mode")
+                    visible: pcView.hostActionsPaired && pcView.hostActionsGameMode
+                    padding: 14
+
+                    background: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(1, 1, 1, 0.09)
+                        border.width: 1
+                        border.color: "#17ffffff"
+                    }
+                    contentItem: Text {
+                        text: addToGameModeButton.text
+                        color: "#eef0f6"
+                        font.pointSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.Wrap
+                    }
+
+                    onClicked: {
+                        pcContextMenu.close()
+                        gameModeToast.show(computerModel.addAllAppsToGameMode(pcView.hostActionsIndex))
+                    }
+                }
+
                 // Bottom two-column row, matching the mockup's
                 // '.act-row' pairing of the primary/accent action
                 // with "Moonlight Settings". "View All Apps" and
@@ -1261,6 +1296,10 @@ FocusScope {
         onAccepted: {
             computerModel.deleteComputer(pcIndex)
         }
+    }
+
+    GameModeToast {
+        id: gameModeToast
     }
 
     NavigableMessageDialog {

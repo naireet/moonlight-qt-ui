@@ -12,6 +12,7 @@ public:
     {
         return id == other.id &&
                 name == other.name &&
+                uuid == other.uuid &&
                 hdrSupported == other.hdrSupported &&
                 isAppCollectorGame == other.isAppCollectorGame &&
                 hidden == other.hidden &&
@@ -38,6 +39,9 @@ public:
 
     int id = 0;
     QString name;
+    // Stable per-app UUID sent by Sunshine in <UUID> (empty for GFE and
+    // older hosts). Used by the CLI's --app-uuid and Game Mode shortcuts.
+    QString uuid;
     bool hdrSupported = false;
     bool isAppCollectorGame = false;
     bool hidden = false;

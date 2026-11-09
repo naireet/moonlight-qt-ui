@@ -1,5 +1,6 @@
 #include "computermanager.h"
 #include "boxartmanager.h"
+#include "gamemode.h"
 #include "nvhttp.h"
 #include "nvpairingmanager.h"
 
@@ -67,8 +68,13 @@ private:
             return false;
         }
 
-        QWriteLocker lock(&m_Computer->lock);
-        changed = m_Computer->updateAppList(appList);
+        {
+            QWriteLocker lock(&m_Computer->lock);
+            changed = m_Computer->updateAppList(appList);
+        }
+
+        // Keep the Game Mode plugin's copy of this host's apps current
+        GameMode::writeHostApps(m_Computer);
         return true;
     }
 
@@ -665,6 +671,9 @@ private:
             if (m_Computer->currentGameId != 0) {
                 http.quitApp();
             }
+
+            // Nothing is running on the host anymore
+            GameMode::markHostAppEnded(m_Computer);
         } catch (const GfeHttpResponseException& e) {
             {
                 QWriteLocker lock(&m_Computer->lock);

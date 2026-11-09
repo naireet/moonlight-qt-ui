@@ -130,6 +130,15 @@ public:
 
     void setShouldExit(bool quitHostApp = false);
 
+    // True if the stream was cut by a network-type failure (not a graceful
+    // host termination or user quit), i.e. auto-reconnect should kick in.
+    Q_INVOKABLE bool isConnectionLost() const;
+
+    // Returns a new StreamReconnector for this session's host/app, or null
+    // if the process is exiting. Returned as QObject to avoid a circular
+    // include with streamreconnector.h.
+    Q_INVOKABLE QObject* createReconnector();
+
 signals:
     void stageStarting(QString stage);
 
@@ -271,6 +280,8 @@ private:
     Uint32 m_FullScreenFlag;
     QQuickWindow* m_QtWindow;
     bool m_UnexpectedTermination;
+    bool m_ConnectionLost;
+    bool m_HostTerminated;
     SdlInputHandler* m_InputHandler;
     int m_MouseEmulationRefCount;
     int m_FlushingWindowEventsRef;

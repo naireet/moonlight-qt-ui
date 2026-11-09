@@ -1,4 +1,5 @@
 #include "computermodel.h"
+#include "backend/gamemode.h"
 
 #include <QThreadPool>
 
@@ -170,6 +171,31 @@ void ComputerModel::wakeComputer(int computerIndex)
 
     DeferredWakeHostTask* wakeTask = new DeferredWakeHostTask(m_Computers[computerIndex]);
     QThreadPool::globalInstance()->start(wakeTask);
+}
+
+bool ComputerModel::isGameModeAvailable()
+{
+    return GameMode::isAvailable();
+}
+
+int ComputerModel::addAllAppsToGameMode(int computerIndex)
+{
+    Q_ASSERT(computerIndex < m_Computers.count());
+    NvComputer* computer = m_Computers[computerIndex];
+
+    // The plugin skips Steam-owned titles itself for bulk requests. Apps the
+    // user hid in Moonlight are left out.
+    QVector<NvApp> apps;
+    {
+        QReadLocker lock(&computer->lock);
+        for (const NvApp& app : std::as_const(computer->appList)) {
+            if (!app.hidden) {
+                apps.append(app);
+            }
+        }
+    }
+
+    return GameMode::requestAdd(computer, apps, true);
 }
 
 void ComputerModel::renameComputer(int computerIndex, QString name)

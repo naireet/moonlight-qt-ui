@@ -142,6 +142,16 @@ public:
 
     int getAppIndex() const
     {
+        // Prefer an exact UUID match when one was given (e.g. by a Game Mode
+        // shortcut), since app names can be renamed or duplicated on the host.
+        if (!m_AppUuid.isEmpty()) {
+            for (int i = 0; i < m_Computer->appList.length(); i++) {
+                if (m_Computer->appList[i].uuid.compare(m_AppUuid, Qt::CaseInsensitive) == 0) {
+                    return i;
+                }
+            }
+        }
+
         for (int i = 0; i < m_Computer->appList.length(); i++) {
             if (m_Computer->appList[i].name.toLower() == m_AppName.toLower()) {
                 return i;
@@ -173,6 +183,7 @@ public:
     Launcher *q_ptr;
     QString m_ComputerName;
     QString m_AppName;
+    QString m_AppUuid;
     StreamingPreferences *m_Preferences;
     ComputerManager *m_ComputerManager;
     ComputerSeeker *m_ComputerSeeker;
@@ -181,7 +192,7 @@ public:
     QTimer *m_TimeoutTimer;
 };
 
-Launcher::Launcher(QString computer, QString app,
+Launcher::Launcher(QString computer, QString app, QString appUuid,
                    StreamingPreferences* preferences, QObject *parent)
     : QObject(parent),
       m_DPtr(new LauncherPrivate(this))
@@ -189,6 +200,7 @@ Launcher::Launcher(QString computer, QString app,
     Q_D(Launcher);
     d->m_ComputerName = computer;
     d->m_AppName = app;
+    d->m_AppUuid = appUuid;
     d->m_Preferences = preferences;
     d->m_State = StateInit;
     d->m_TimeoutTimer = new QTimer(this);

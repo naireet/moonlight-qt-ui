@@ -187,6 +187,10 @@ void SdlGamepadKeyNavigation::onPollingTimerFired()
                 sendKey(type, Qt::Key_Menu);
                 break;
             case SDL_CONTROLLER_BUTTON_Y:
+                // Distinct from Start so StreamSegue's reconnect screen can
+                // bind "quit game" to Y alone. main.qml maps both to settings.
+                sendKey(type, Qt::Key_Call);
+                break;
             case SDL_CONTROLLER_BUTTON_START:
                 // HACK: We use this keycode to inform main.qml
                 // to show the settings when Key_Menu is handled

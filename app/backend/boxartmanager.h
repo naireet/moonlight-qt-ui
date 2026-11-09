@@ -22,6 +22,12 @@ public:
     void
     deleteBoxArt(NvComputer* computer);
 
+    // Absolute path of the cached box art for an app, or an empty string
+    // if it hasn't been downloaded yet
+    static
+    QString
+    getCachedBoxArtPath(NvComputer* computer, int appId);
+
 signals:
     void
     boxArtLoadComplete(NvComputer* computer, NvApp app, QUrl image);
