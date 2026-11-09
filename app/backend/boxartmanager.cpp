@@ -1,6 +1,7 @@
 #include "boxartmanager.h"
 #include "../path.h"
 
+#include <QFileInfo>
 #include <QImageReader>
 #include <QImageWriter>
 
@@ -95,6 +96,16 @@ void BoxArtManager::deleteBoxArt(NvComputer* computer)
     if (dir.cd(computer->uuid)) {
         dir.removeRecursively();
     }
+}
+
+QString BoxArtManager::getCachedBoxArtPath(NvComputer* computer, int appId)
+{
+    QFileInfo info(QDir(Path::getBoxArtCacheDir()).filePath(computer->uuid + "/" + QString::number(appId) + ".png"));
+    if (info.exists() && info.size() > 0) {
+        return info.absoluteFilePath();
+    }
+
+    return QString();
 }
 
 void BoxArtManager::handleBoxArtLoadComplete(NvComputer* computer, NvApp app, QUrl image)

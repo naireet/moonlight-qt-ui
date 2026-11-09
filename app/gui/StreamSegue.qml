@@ -4,6 +4,7 @@ import QtQuick.Window 2.2
 
 import SdlGamepadKeyNavigation 1.0
 import Session 1.0
+import StreamingPreferences 1.0
 import SystemProperties 1.0
 
 Item {
@@ -14,6 +15,24 @@ Item {
                                            qsTr("Starting %1...").arg(appName)
     property bool isResume : false
     property bool quitAfter : false
+
+    // Auto-reconnect state. When a running stream drops (see
+    // Session::isConnectionLost()), this segue stays on screen in a
+    // "reconnecting" mode driven by a StreamReconnector, then swaps in a
+    // fresh Session and runs the normal start path again to resume.
+    // reconnectDeadline is non-zero from the drop until a stream is
+    // connected again, so failed resume attempts in between (e.g. the host
+    // hasn't noticed the old session is gone yet) just keep retrying.
+    property bool reconnecting : false
+    property bool reconnectQuitting : false
+    property var reconnector : null
+    property double reconnectDeadline : 0
+    property string reconnectHostName : ""
+    property string lostErrorText : ""
+
+    // The finished Session is parked here until its cleanup emits
+    // readyForDeletion, since it must not be garbage collected before then
+    property var retiredSession : null
 
     Item {
         anchors.fill: parent
@@ -56,6 +75,9 @@ Item {
 
     function connectionStarted()
     {
+        // A stream is up again, so any reconnect countdown is over
+        reconnectDeadline = 0
+
         // Hide the UI contents so the user doesn't
         // see them briefly when we pop off the StackView
         stageSpinner.visible = false
@@ -87,6 +109,15 @@ Item {
     }
 
     function sessionFinished(portTestResult)
+    {
+        if (tryStartReconnect()) {
+            return
+        }
+
+        finishStream(portTestResult)
+    }
+
+    function finishStream(portTestResult)
     {
         if (portTestResult !== 0 && portTestResult !== -1 && streamSegueErrorDialog.text) {
             streamSegueErrorDialog.text += "\n\n" + qsTr("This PC's Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.")
@@ -123,8 +154,224 @@ Item {
     {
         // Garbage collect the Session object since it's pretty heavyweight
         // and keeps other libraries (like SDL_TTF) around until it is deleted.
-        session = null
+        // During auto-reconnect the finished session is the retired one, and
+        // `session` may already be the next attempt.
+        if (retiredSession) {
+            retiredSession = null
+        }
+        else {
+            session = null
+        }
         gc()
+    }
+
+    function connectSession()
+    {
+        session.stageStarting.connect(stageStarting)
+        session.stageFailed.connect(stageFailed)
+        session.connectionStarted.connect(connectionStarted)
+        session.displayLaunchError.connect(displayLaunchError)
+        session.quitStarting.connect(quitStarting)
+        session.sessionFinished.connect(sessionFinished)
+        session.readyForDeletion.connect(sessionReadyForDeletion)
+    }
+
+    function startSession()
+    {
+        // Hook up our signals
+        connectSession()
+
+        // Ensure the SystemProperties async thread is finished,
+        // since it may currently be using the SDL video subsystem
+        SystemProperties.waitForAsyncLoad()
+
+        // Kick off the stream. Toggling the loader re-runs onLoaded
+        // for a reconnect attempt. The spinner is hidden until onLoaded
+        // has finished session.initialize() (see the comment there).
+        stageSpinner.visible = false
+        streamLoader.active = false
+        streamLoader.active = true
+    }
+
+    function formatReconnectTime(seconds)
+    {
+        var secs = seconds % 60
+        return Math.floor(seconds / 60) + ":" + (secs < 10 ? "0" : "") + secs
+    }
+
+    function updateReconnectCountdown()
+    {
+        var left = Math.max(0, Math.ceil((reconnectDeadline - Date.now()) / 1000))
+        stageText = qsTr("Connection lost - reconnecting to %1... %2").arg(reconnectHostName).arg(formatReconnectTime(left))
+        if (left <= 0) {
+            giveUpReconnect()
+        }
+    }
+
+    // Called from sessionFinished(). Returns true if we entered (or stayed
+    // in) reconnect mode instead of finishing the stream.
+    function tryStartReconnect()
+    {
+        if (!session || StreamingPreferences.autoReconnectTimeout <= 0) {
+            return false
+        }
+
+        if (session.isConnectionLost()) {
+            // A running stream dropped: start a fresh countdown, keeping the
+            // error to show if we end up giving up
+            lostErrorText = streamSegueErrorDialog.text
+            reconnectDeadline = Date.now() + StreamingPreferences.autoReconnectTimeout * 1000
+        }
+        else if (reconnectDeadline <= 0) {
+            // Normal end of a stream
+            return false
+        }
+        else if (Date.now() >= reconnectDeadline) {
+            // A resume attempt failed after the countdown ran out
+            reconnectDeadline = 0
+            streamSegueErrorDialog.text = lostErrorText
+            return false
+        }
+
+        // Null if we're exiting (e.g. SIGTERM from Steam's "Exit game")
+        var r = session.createReconnector()
+        if (!r) {
+            reconnectDeadline = 0
+            return false
+        }
+
+        // Stop listening to the finished session except for its cleanup
+        session.stageStarting.disconnect(stageStarting)
+        session.stageFailed.disconnect(stageFailed)
+        session.connectionStarted.disconnect(connectionStarted)
+        session.displayLaunchError.disconnect(displayLaunchError)
+        session.quitStarting.disconnect(quitStarting)
+        session.sessionFinished.disconnect(sessionFinished)
+        retiredSession = session
+        session = null
+
+        reconnector = r
+        reconnectHostName = r.hostName()
+        reconnectQuitting = false
+        reconnecting = true
+        if (boxArtImageUrl === "") {
+            // CLI launches don't pass box art, so use the cached copy
+            boxArtImageUrl = r.boxArtUrl()
+        }
+        r.hostReady.connect(reconnectHostReady)
+        r.appNotRunning.connect(reconnectAppNotRunning)
+        r.quitFinished.connect(reconnectQuitFinished)
+        r.start()
+
+        // Errors from failed attempts are not interesting while retrying
+        streamSegueErrorDialog.text = ""
+
+        updateReconnectCountdown()
+        reconnectTimer.start()
+        stageSpinner.visible = true
+        stageLabel.visible = true
+        hintText.visible = true
+        hintText.text = qsTr("Press %1 to stop reconnecting or %2 to quit the game").arg(
+                    SdlGamepadKeyNavigation.getConnectedGamepads() > 0 ? qsTr("B") : qsTr("Esc")).arg(qsTr("Y"))
+
+        // Show the Qt window again and take input for B/Y
+        window.visible = true
+        SdlGamepadKeyNavigation.enable()
+        forceActiveFocus()
+        return true
+    }
+
+    function endReconnect()
+    {
+        reconnectTimer.stop()
+        reconnecting = false
+        reconnectDeadline = 0
+        if (reconnector) {
+            reconnector.stop()
+            reconnector.hostReady.disconnect(reconnectHostReady)
+            reconnector.appNotRunning.disconnect(reconnectAppNotRunning)
+            reconnector.quitFinished.disconnect(reconnectQuitFinished)
+            reconnector = null
+        }
+    }
+
+    function reconnectHostReady()
+    {
+        // Resume through the normal start path with a fresh Session, keeping
+        // the countdown running in case this attempt fails too
+        reconnectTimer.stop()
+        reconnecting = false
+        session = reconnector.createSession()
+        reconnector.hostReady.disconnect(reconnectHostReady)
+        reconnector.appNotRunning.disconnect(reconnectAppNotRunning)
+        reconnector.quitFinished.disconnect(reconnectQuitFinished)
+        reconnector = null
+
+        isResume = true
+        stageText = qsTr("Resuming %1...").arg(appName)
+        startSession()
+    }
+
+    function reconnectAppNotRunning()
+    {
+        endReconnect()
+        streamSegueErrorDialog.text = qsTr("%1 is no longer running on %2.").arg(appName).arg(reconnectHostName)
+        finishStream(0)
+    }
+
+    // B / Esc: stop trying and leave like a normal disconnect (the app
+    // keeps running on the host)
+    function stopReconnect()
+    {
+        endReconnect()
+        streamSegueErrorDialog.text = ""
+        finishStream(0)
+    }
+
+    function giveUpReconnect()
+    {
+        endReconnect()
+        streamSegueErrorDialog.text = lostErrorText
+        finishStream(0)
+    }
+
+    // Y: quit the game on the host, then leave
+    function quitFromReconnect()
+    {
+        reconnectQuitting = true
+        reconnectTimer.stop()
+        stageText = qsTr("Quitting %1...").arg(appName)
+        reconnector.quitHostApp()
+    }
+
+    function reconnectQuitFinished(error)
+    {
+        endReconnect()
+        streamSegueErrorDialog.text = error
+        finishStream(0)
+    }
+
+    Keys.onPressed: {
+        if (!reconnecting || reconnectQuitting) {
+            return
+        }
+
+        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) {
+            stopReconnect()
+            event.accepted = true
+        }
+        // Gamepad Y arrives as Key_Hangup (see SdlGamepadKeyNavigation)
+        else if (event.key === Qt.Key_Hangup || event.key === Qt.Key_Y) {
+            quitFromReconnect()
+            event.accepted = true
+        }
+    }
+
+    Timer {
+        id: reconnectTimer
+        interval: 1000
+        repeat: true
+        onTriggered: updateReconnectCountdown()
     }
 
     StackView.onDeactivating: {
@@ -142,21 +389,7 @@ Item {
         // Hide the toolbar before we start loading
         window.streamActive = true
 
-        // Hook up our signals
-        session.stageStarting.connect(stageStarting)
-        session.stageFailed.connect(stageFailed)
-        session.connectionStarted.connect(connectionStarted)
-        session.displayLaunchError.connect(displayLaunchError)
-        session.quitStarting.connect(quitStarting)
-        session.sessionFinished.connect(sessionFinished)
-        session.readyForDeletion.connect(sessionReadyForDeletion)
-
-        // Ensure the SystemProperties async thread is finished,
-        // since it may currently be using the SDL video subsystem
-        SystemProperties.waitForAsyncLoad()
-
-        // Kick off the stream
-        streamLoader.active = true
+        startSession()
     }
 
     Timer {
@@ -295,7 +528,7 @@ Item {
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: stageLabel.visible
-            text: qsTr("Initializing Moonlight…")
+            text: reconnecting ? appName : qsTr("Initializing Moonlight…")
             color: "#eef0f6"
             font.pointSize: 20
             horizontalAlignment: Text.AlignHCenter

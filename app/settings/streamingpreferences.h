@@ -173,6 +173,7 @@ public:
     Q_PROPERTY(bool multiController MEMBER multiController NOTIFY multiControllerChanged)
     Q_PROPERTY(bool enableMdns MEMBER enableMdns NOTIFY enableMdnsChanged)
     Q_PROPERTY(bool quitAppAfter MEMBER quitAppAfter NOTIFY quitAppAfterChanged)
+    Q_PROPERTY(int autoReconnectTimeout MEMBER autoReconnectTimeout NOTIFY autoReconnectTimeoutChanged)
     Q_PROPERTY(bool absoluteMouseMode MEMBER absoluteMouseMode NOTIFY absoluteMouseModeChanged)
     Q_PROPERTY(bool absoluteTouchMode MEMBER absoluteTouchMode NOTIFY absoluteTouchModeChanged)
     Q_PROPERTY(bool framePacing MEMBER framePacing NOTIFY framePacingChanged)
@@ -225,6 +226,8 @@ public:
     bool multiController;
     bool enableMdns;
     bool quitAppAfter;
+    // Seconds to keep trying to resume after an unexpected disconnect (0 = off)
+    int autoReconnectTimeout;
     bool absoluteMouseMode;
     bool absoluteTouchMode;
     bool framePacing;
@@ -275,6 +278,7 @@ signals:
     void unsupportedFpsChanged();
     void enableMdnsChanged();
     void quitAppAfterChanged();
+    void autoReconnectTimeoutChanged();
     void absoluteMouseModeChanged();
     void absoluteTouchModeChanged();
     void audioConfigChanged();

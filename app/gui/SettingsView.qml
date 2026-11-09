@@ -1439,6 +1439,54 @@ Item {
                     ToolTip.text: qsTr("This will close the app or game you are streaming when you end your stream. You will lose any unsaved progress!")
                 }
 
+                SettingRow {
+                    width: parent.width
+                    label: qsTr("Auto-reconnect")
+                    description: qsTr("Keep trying to resume the stream for this long if the connection drops unexpectedly.")
+
+                AutoResizingComboBox {
+                    id: autoReconnectComboBox
+                    maximumWidth: 260
+                    textRole: "text"
+                    Component.onCompleted: {
+                        var saved_timeout = StreamingPreferences.autoReconnectTimeout
+                        currentIndex = 0
+                        for (var i = 0; i < autoReconnectListModel.count; i++) {
+                            if (saved_timeout === autoReconnectListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    model: ListModel {
+                        id: autoReconnectListModel
+                        ListElement {
+                            text: qsTr("Off")
+                            val: 0
+                        }
+                        ListElement {
+                            text: qsTr("30 seconds")
+                            val: 30
+                        }
+                        ListElement {
+                            text: qsTr("1 minute")
+                            val: 60
+                        }
+                        ListElement {
+                            text: qsTr("2 minutes")
+                            val: 120
+                        }
+                        ListElement {
+                            text: qsTr("5 minutes")
+                            val: 300
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.autoReconnectTimeout = autoReconnectListModel.get(currentIndex).val
+                    }
+                }
+                }
+
 
                 SectionHeader {
                     width: parent.width
