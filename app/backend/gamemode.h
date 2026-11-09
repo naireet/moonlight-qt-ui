@@ -18,4 +18,11 @@ namespace GameMode
 
     // Writes one add request per app and returns how many were written
     int requestAdd(NvComputer* computer, const QVector<NvApp>& apps, bool bulk);
+
+    // Records the last streamed app in last-session.json (Linux only), so the
+    // plugin can show "Resume" while the app is still running on the host
+    void writeLastSession(NvComputer* computer, const NvApp& app, bool hostAppRunning);
+
+    // Sets hostAppRunning to false if last-session.json is for this host
+    void markHostAppEnded(NvComputer* computer);
 }

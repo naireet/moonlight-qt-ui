@@ -1,5 +1,6 @@
 #include "session.h"
 #include "streamreconnector.h"
+#include "backend/gamemode.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
@@ -94,6 +95,8 @@ void Session::clConnectionTerminated(int errorCode)
     // Display the termination dialog if this was not intended
     switch (errorCode) {
     case ML_ERROR_GRACEFUL_TERMINATION:
+        // The host ended the stream itself (e.g. the game was quit on it)
+        s_ActiveSession->m_HostTerminated = true;
         break;
 
     case ML_ERROR_NO_VIDEO_TRAFFIC:
@@ -583,6 +586,7 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_QtWindow(nullptr),
       m_UnexpectedTermination(true), // Failure prior to streaming is unexpected
       m_ConnectionLost(false),
+      m_HostTerminated(false),
       m_InputHandler(nullptr),
       m_MouseEmulationRefCount(0),
       m_FlushingWindowEventsRef(0),
@@ -1287,6 +1291,14 @@ private:
                 !m_Session->m_UnexpectedTermination &&
                 m_Session->m_Preferences->quitAppAfter;
 
+        // Record whether the app is still running on the host for the Game
+        // Mode plugin. Done before notifying the UI so it can't race with a
+        // reconnect attempt that finds the app gone.
+        if (m_Session->m_AsyncConnectionSuccess && !shouldQuit) {
+            GameMode::writeLastSession(m_Session->m_Computer, m_Session->m_App,
+                                       !m_Session->m_HostTerminated);
+        }
+
         // Notify the UI
         if (shouldQuit) {
             emit m_Session->quitStarting();
@@ -1310,6 +1322,7 @@ private:
             // Logging is already done inside NvHTTP
             try {
                 http.quitApp();
+                GameMode::writeLastSession(m_Session->m_Computer, m_Session->m_App, false);
             } catch (const GfeHttpResponseException&) {
             } catch (const QtNetworkReplyException&) {
             }
@@ -1723,6 +1736,10 @@ bool Session::startConnectionAsync()
         // listener.
         return false;
     }
+
+    // Mark the app as running before anything else, so a crash or kill
+    // mid-stream still leaves the plugin offering "Resume"
+    GameMode::writeLastSession(m_Computer, m_App, true);
 
     emit connectionStarted();
     return true;

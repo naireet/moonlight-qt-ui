@@ -1,5 +1,6 @@
 #include "streamreconnector.h"
 #include "backend/boxartmanager.h"
+#include "backend/gamemode.h"
 #include "backend/nvhttp.h"
 #include "settings/streamingprofilemanager.h"
 
@@ -148,6 +149,7 @@ void StreamReconnector::handlePollResult(int gameId)
         emit hostReady();
     }
     else {
+        GameMode::writeLastSession(m_Computer, m_App, false);
         emit appNotRunning();
     }
 }
@@ -158,12 +160,14 @@ void StreamReconnector::quitHostApp()
 
     QPointer<StreamReconnector> self(this);
     NvComputer* computer = m_Computer;
-    QThreadPool::globalInstance()->start(new FunctionTask([self, computer]() {
+    NvApp app = m_App;
+    QThreadPool::globalInstance()->start(new FunctionTask([self, computer, app]() {
         QString error;
 
         try {
             NvHTTP http(computer);
             http.quitApp();
+            GameMode::writeLastSession(computer, app, false);
         } catch (const GfeHttpResponseException& e) {
             error = e.toQString();
         } catch (const QtNetworkReplyException& e) {

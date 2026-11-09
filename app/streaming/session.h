@@ -281,6 +281,7 @@ private:
     QQuickWindow* m_QtWindow;
     bool m_UnexpectedTermination;
     bool m_ConnectionLost;
+    bool m_HostTerminated;
     SdlInputHandler* m_InputHandler;
     int m_MouseEmulationRefCount;
     int m_FlushingWindowEventsRef;

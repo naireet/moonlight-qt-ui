@@ -671,6 +671,9 @@ private:
             if (m_Computer->currentGameId != 0) {
                 http.quitApp();
             }
+
+            // Nothing is running on the host anymore
+            GameMode::markHostAppEnded(m_Computer);
         } catch (const GfeHttpResponseException& e) {
             {
                 QWriteLocker lock(&m_Computer->lock);

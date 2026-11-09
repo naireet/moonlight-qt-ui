@@ -181,3 +181,70 @@ int GameMode::requestAdd(NvComputer* computer, const QVector<NvApp>& apps, bool 
 
     return count;
 }
+
+#ifdef Q_OS_LINUX
+static QMutex s_LastSessionLock;
+
+static void writeLastSessionObject(QJsonObject session)
+{
+    session["version"] = 1;
+    session["updated"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QDir().mkpath(dataDir());
+    QString path = dataDir() + "/last-session.json";
+    if (!writeAtomically(path, QJsonDocument(session).toJson())) {
+        qWarning() << "Failed to write" << path;
+    }
+}
+#endif
+
+void GameMode::writeLastSession(NvComputer* computer, const NvApp& app, bool hostAppRunning)
+{
+#ifdef Q_OS_LINUX
+    QJsonObject session;
+    {
+        QReadLocker lock(&computer->lock);
+        session["hostUuid"] = computer->uuid;
+    }
+    session["appUuid"] = app.uuid;
+    session["appName"] = stripZeroWidth(app.name);
+    session["hostAppRunning"] = hostAppRunning;
+
+    QMutexLocker locker(&s_LastSessionLock);
+    writeLastSessionObject(session);
+#else
+    Q_UNUSED(computer);
+    Q_UNUSED(app);
+    Q_UNUSED(hostAppRunning);
+#endif
+}
+
+void GameMode::markHostAppEnded(NvComputer* computer)
+{
+#ifdef Q_OS_LINUX
+    QString hostUuid;
+    {
+        QReadLocker lock(&computer->lock);
+        hostUuid = computer->uuid;
+    }
+
+    QMutexLocker locker(&s_LastSessionLock);
+
+    QFile file(dataDir() + "/last-session.json");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QJsonObject session = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+
+    if (session.value("hostUuid").toString() != hostUuid ||
+            !session.value("hostAppRunning").toBool()) {
+        return;
+    }
+
+    session["hostAppRunning"] = false;
+    writeLastSessionObject(session);
+#else
+    Q_UNUSED(computer);
+#endif
+}
