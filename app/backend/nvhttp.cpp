@@ -336,6 +336,9 @@ NvHTTP::getAppList()
                 else if (XML_NAME_EQUALS(name, "ID")) {
                     apps.last().id = xmlReader.readElementText().toInt();
                 }
+                else if (XML_NAME_EQUALS(name, "UUID")) {
+                    apps.last().uuid = xmlReader.readElementText();
+                }
                 else if (XML_NAME_EQUALS(name, "IsHdrSupported")) {
                     apps.last().hdrSupported = xmlReader.readElementText() == "1";
                 }

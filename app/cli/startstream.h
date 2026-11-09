@@ -20,7 +20,7 @@ class Launcher : public QObject
     Q_DECLARE_PRIVATE_D(m_DPtr, Launcher)
 
 public:
-    explicit Launcher(QString computer, QString app,
+    explicit Launcher(QString computer, QString app, QString appUuid,
                       StreamingPreferences* preferences,
                       QObject *parent = nullptr);
     ~Launcher();

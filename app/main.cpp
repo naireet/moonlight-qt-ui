@@ -1005,7 +1005,7 @@ int main(int argc, char *argv[])
             streamParser.parse(app.arguments(), preferences);
             QString host    = streamParser.getHost();
             QString appName = streamParser.getAppName();
-            auto launcher   = new CliStartStream::Launcher(host, appName, preferences, &app);
+            auto launcher   = new CliStartStream::Launcher(host, appName, streamParser.getAppUuid(), preferences, &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
             break;
         }
