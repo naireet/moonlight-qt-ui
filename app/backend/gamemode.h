@@ -7,8 +7,16 @@
 // - host-apps.json: every paired host's app list, written by us
 // - plugin.json: written by the plugin; its presence enables our menu items
 // - requests/<uuid>.json: one "add" request per app, consumed by the plugin
+// - last-session.json: the last streamed app, written by us
+// - stream-state.json and control/: see streaming/streamcontrol.h
 namespace GameMode
 {
+    // $HOME/.local/share/moonlight-stream
+    QString dataDir();
+
+    // Removes the zero-width characters some hosts put in app names
+    QString stripZeroWidth(QString text);
+
     // True if the plugin is installed and we're running under SteamOS/gamescope
     bool isAvailable();
 

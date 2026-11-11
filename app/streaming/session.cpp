@@ -30,6 +30,11 @@
 #define SDL_CODE_GAMECONTROLLER_SET_MOTION_EVENT_STATE 103
 #define SDL_CODE_GAMECONTROLLER_SET_CONTROLLER_LED 104
 #define SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS 105
+#define SDL_CODE_STREAM_CONTROL 106
+
+// Tags SDL_CODE_STREAM_CONTROL events so a late one can't leak into the next
+// session. Only touched on the main thread.
+static uintptr_t s_StreamControlGeneration = 0;
 
 #include <openssl/rand.h>
 
@@ -591,6 +596,7 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_MouseEmulationRefCount(0),
       m_FlushingWindowEventsRef(0),
       m_ShouldExit(false),
+      m_ControlEndCommand(StreamControl::CommandNone),
       m_AsyncConnectionSuccess(false),
       m_PortTestResults(0),
       m_OpusDecoder(nullptr),
@@ -1286,10 +1292,21 @@ private:
 
     void run() override
     {
-        // Only quit the running app if our session terminated gracefully
-        bool shouldQuit =
-                !m_Session->m_UnexpectedTermination &&
-                m_Session->m_Preferences->quitAppAfter;
+        // Only quit the running app if our session terminated gracefully,
+        // unless the Deckstream plugin explicitly asked for one or the other
+        bool shouldQuit;
+        switch (m_Session->m_ControlEndCommand) {
+        case StreamControl::CommandQuit:
+            shouldQuit = true;
+            break;
+        case StreamControl::CommandDisconnect:
+            shouldQuit = false;
+            break;
+        default:
+            shouldQuit = !m_Session->m_UnexpectedTermination &&
+                         m_Session->m_Preferences->quitAppAfter;
+            break;
+        }
 
         // Record whether the app is still running on the host for the Game
         // Mode plugin. Done before notifying the UI so it can't race with a
@@ -1777,13 +1794,13 @@ void Session::setShouldExit(bool quitHostApp)
 
 bool Session::isConnectionLost() const
 {
-    // An exit request (e.g. SIGTERM) always wins over reconnecting
-    return m_ConnectionLost && !m_ShouldExit;
+    // An exit request (e.g. SIGTERM) or a plugin command always wins over reconnecting
+    return m_ConnectionLost && !m_ShouldExit && m_ControlEndCommand == StreamControl::CommandNone;
 }
 
 QObject* Session::createReconnector()
 {
-    if (m_ShouldExit) {
+    if (m_ShouldExit || m_ControlEndCommand != StreamControl::CommandNone) {
         return nullptr;
     }
 
@@ -2029,6 +2046,31 @@ void Session::exec()
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
+    // Let the Deckstream plugin see and control this stream
+    bool statsVisibleReported = m_OverlayManager.isOverlayEnabled(Overlay::OverlayDebug);
+#ifdef Q_OS_LINUX
+    {
+        StreamControl::StreamInfo info;
+        {
+            QReadLocker lock(&m_Computer->lock);
+            info.hostUuid = m_Computer->uuid;
+            info.hostName = m_Computer->name;
+        }
+        info.appUuid = m_App.uuid;
+        info.appName = GameMode::stripZeroWidth(m_App.name);
+
+        uintptr_t generation = ++s_StreamControlGeneration;
+        StreamControl::get()->sessionStarted(info, statsVisibleReported, [generation](StreamControl::Command command) {
+            SDL_Event event = {};
+            event.type = SDL_USEREVENT;
+            event.user.code = SDL_CODE_STREAM_CONTROL;
+            event.user.data1 = (void*)(uintptr_t)command;
+            event.user.data2 = (void*)generation;
+            SDL_PushEvent(&event);
+        });
+    }
+#endif
+
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
 
@@ -2036,6 +2078,14 @@ void Session::exec()
     // because we want to suspend all Qt processing until the stream is over.
     SDL_Event event;
     for (;;) {
+        // Catches every way of toggling the overlay (key/gamepad combos, plugin)
+        if (m_OverlayManager.isOverlayEnabled(Overlay::OverlayDebug) != statsVisibleReported) {
+            statsVisibleReported = !statsVisibleReported;
+#ifdef Q_OS_LINUX
+            StreamControl::get()->setStatsVisible(statsVisibleReported);
+#endif
+        }
+
 #if SDL_VERSION_ATLEAST(2, 0, 18) && !defined(STEAM_LINK)
         // SDL 2.0.18 has a proper wait event implementation that uses platform
         // support to block on events rather than polling on Windows, macOS, X11,
@@ -2107,6 +2157,26 @@ void Session::exec()
             case SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS:
                 m_InputHandler->setAdaptiveTriggers((uint16_t)(uintptr_t)event.user.data1,
                                                     (DualSenseOutputReport *)event.user.data2);
+                break;
+            case SDL_CODE_STREAM_CONTROL:
+                if ((uintptr_t)event.user.data2 != s_StreamControlGeneration) {
+                    break;
+                }
+                switch ((StreamControl::Command)(uintptr_t)event.user.data1) {
+                case StreamControl::CommandDisconnect:
+                case StreamControl::CommandQuit:
+                    m_ControlEndCommand = (StreamControl::Command)(uintptr_t)event.user.data1;
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "Stream ended by plugin command (%s)",
+                                m_ControlEndCommand == StreamControl::CommandQuit ? "quit" : "disconnect");
+                    goto DispatchDeferredCleanup;
+                case StreamControl::CommandToggleStats:
+                    m_OverlayManager.setOverlayState(Overlay::OverlayDebug,
+                                                     !m_OverlayManager.isOverlayEnabled(Overlay::OverlayDebug));
+                    break;
+                default:
+                    break;
+                }
                 break;
             default:
                 SDL_assert(false);
@@ -2380,6 +2450,11 @@ void Session::exec()
     }
 
 DispatchDeferredCleanup:
+#ifdef Q_OS_LINUX
+    // Stop accepting plugin commands and remove stream-state.json
+    StreamControl::get()->sessionEnded();
+#endif
+
     // Switch back to synchronous logging mode
     StreamUtils::exitAsyncLoggingMode();
 
