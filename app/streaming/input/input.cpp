@@ -20,6 +20,7 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
       m_PendingMouseButtonsAllUpOnVideoRegionLeave(false),
       m_PointerRegionLockActive(false),
       m_PointerRegionLockToggledByUser(false),
+      m_SteamOverlayKeyTimer(0),
       m_FakeMouseCaptureActive(false),
       m_KeyboardCaptureActive(false),
       m_CaptureSystemKeysMode(prefs.captureSysKeysMode),
@@ -225,10 +226,6 @@ SdlInputHandler::~SdlInputHandler()
             SDL_RemoveTimer(m_GamepadState[i].mouseEmulationTimer);
         }
 
-        // Release Shift+Tab on the host if the session is torn down mid-hold.
-        // raiseAllKeys() does not cover this: the synthetic keys are never added
-        // to m_KeysDown, so nothing else will ever raise them.
-        cancelSteamOverlayKeyHold(&m_GamepadState[i]);
 #if !SDL_VERSION_ATLEAST(2, 0, 9)
         if (m_GamepadState[i].haptic != nullptr) {
             SDL_HapticClose(m_GamepadState[i].haptic);
@@ -243,6 +240,11 @@ SdlInputHandler::~SdlInputHandler()
     SDL_RemoveTimer(m_LeftButtonReleaseTimer);
     SDL_RemoveTimer(m_RightButtonReleaseTimer);
     SDL_RemoveTimer(m_DragTimer);
+
+    // Release Shift+Tab on the host if the session is torn down mid-hold.
+    // raiseAllKeys() does not cover this: the synthetic keys are never added
+    // to m_KeysDown, so nothing else will ever raise them.
+    cancelSteamOverlayKeyHold();
 
 #if !SDL_VERSION_ATLEAST(2, 0, 9)
     SDL_QuitSubSystem(SDL_INIT_HAPTIC);

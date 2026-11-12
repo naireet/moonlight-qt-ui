@@ -2,6 +2,7 @@
 #include "ffmpeg.h"
 #include "utils.h"
 #include "streaming/session.h"
+#include <QDateTime>
 
 #include <h264_stream.h>
 
@@ -802,82 +803,94 @@ void FFmpegVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
     dst.renderedFps     = (double)dst.renderedFrames / timeDiffSecs;
 }
 
+const char* FFmpegVideoDecoder::getCodecString()
+{
+    switch (m_VideoFormat)
+    {
+    case VIDEO_FORMAT_H264:
+        return "H.264";
+
+    case VIDEO_FORMAT_H264_HIGH8_444:
+        return "H.264 4:4:4";
+
+    case VIDEO_FORMAT_H265:
+        return "HEVC";
+
+    case VIDEO_FORMAT_H265_REXT8_444:
+        return "HEVC 4:4:4";
+
+    case VIDEO_FORMAT_H265_MAIN10:
+        return LiGetCurrentHostDisplayHdrMode() ? "HEVC 10-bit HDR" : "HEVC 10-bit SDR";
+
+    case VIDEO_FORMAT_H265_REXT10_444:
+        return LiGetCurrentHostDisplayHdrMode() ? "HEVC 10-bit HDR 4:4:4" : "HEVC 10-bit SDR 4:4:4";
+
+    case VIDEO_FORMAT_AV1_MAIN8:
+        return "AV1";
+
+    case VIDEO_FORMAT_AV1_HIGH8_444:
+        return "AV1 4:4:4";
+
+    case VIDEO_FORMAT_AV1_MAIN10:
+        return LiGetCurrentHostDisplayHdrMode() ? "AV1 10-bit HDR" : "AV1 10-bit SDR";
+
+    case VIDEO_FORMAT_AV1_HIGH10_444:
+        return LiGetCurrentHostDisplayHdrMode() ? "AV1 10-bit HDR 4:4:4" : "AV1 10-bit SDR 4:4:4";
+
+    default:
+        SDL_assert(false);
+        return "UNKNOWN";
+    }
+}
+
+void FFmpegVideoDecoder::exportStreamStats(VIDEO_STATS& stats)
+{
+    // Same values and conditions as stringifyVideoStats()
+    StreamControl::Stats out;
+    out.ts = QDateTime::currentSecsSinceEpoch();
+    out.codec = getCodecString();
+    out.bitrateMbps = m_BwTracker.GetAverageMbps();
+
+    if (stats.receivedFps > 0) {
+        if (m_VideoDecoderCtx != nullptr) {
+            out.width = m_VideoDecoderCtx->width;
+            out.height = m_VideoDecoderCtx->height;
+        }
+        out.fpsIncoming = stats.receivedFps;
+        out.fpsRendered = stats.renderedFps;
+    }
+
+    if (stats.framesWithHostProcessingLatency > 0) {
+        out.hostLatencyMs = (double)stats.totalHostProcessingLatency / 10 / stats.framesWithHostProcessingLatency;
+    }
+
+    if (stats.renderedFrames != 0) {
+        if (stats.lastRtt != 0) {
+            out.networkLatencyMs = stats.lastRtt;
+            out.networkLatencyVarianceMs = stats.lastRttVariance;
+        }
+        if (stats.totalFrames != 0) {
+            out.framesDroppedNetworkPct = (double)stats.networkDroppedFrames / stats.totalFrames * 100;
+        }
+        if (stats.decodedFrames != 0) {
+            out.framesDroppedJitterPct = (double)stats.pacerDroppedFrames / stats.decodedFrames * 100;
+            out.decodeMs = (double)(stats.totalDecodeTimeUs / 1000.0) / stats.decodedFrames;
+        }
+        out.queueMs = (double)(stats.totalPacerTimeUs / 1000.0) / stats.renderedFrames;
+        out.renderMs = (double)(stats.totalRenderTimeUs / 1000.0) / stats.renderedFrames;
+    }
+
+    StreamControl::get()->updateStats(out);
+}
+
 void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, int length)
 {
     int offset = 0;
-    const char* codecString;
+    const char* codecString = getCodecString();
     int ret;
 
     // Start with an empty string
     output[offset] = 0;
-
-    switch (m_VideoFormat)
-    {
-    case VIDEO_FORMAT_H264:
-        codecString = "H.264";
-        break;
-
-    case VIDEO_FORMAT_H264_HIGH8_444:
-        codecString = "H.264 4:4:4";
-        break;
-
-    case VIDEO_FORMAT_H265:
-        codecString = "HEVC";
-        break;
-
-    case VIDEO_FORMAT_H265_REXT8_444:
-        codecString = "HEVC 4:4:4";
-        break;
-
-    case VIDEO_FORMAT_H265_MAIN10:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "HEVC 10-bit HDR";
-        }
-        else {
-            codecString = "HEVC 10-bit SDR";
-        }
-        break;
-
-    case VIDEO_FORMAT_H265_REXT10_444:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "HEVC 10-bit HDR 4:4:4";
-        }
-        else {
-            codecString = "HEVC 10-bit SDR 4:4:4";
-        }
-        break;
-
-    case VIDEO_FORMAT_AV1_MAIN8:
-        codecString = "AV1";
-        break;
-
-    case VIDEO_FORMAT_AV1_HIGH8_444:
-        codecString = "AV1 4:4:4";
-        break;
-
-    case VIDEO_FORMAT_AV1_MAIN10:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "AV1 10-bit HDR";
-        }
-        else {
-            codecString = "AV1 10-bit SDR";
-        }
-        break;
-
-    case VIDEO_FORMAT_AV1_HIGH10_444:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "AV1 10-bit HDR 4:4:4";
-        }
-        else {
-            codecString = "AV1 10-bit SDR 4:4:4";
-        }
-        break;
-
-    default:
-        SDL_assert(false);
-        codecString = "UNKNOWN";
-        break;
-    }
 
     if (stats.receivedFps > 0) {
         if (m_VideoDecoderCtx != nullptr) {
@@ -2160,6 +2173,16 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             }
             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
         }
+
+#ifdef Q_OS_LINUX
+        // The Deckstream plugin shows these even with the overlay hidden
+        {
+            VIDEO_STATS lastTwoWndStats = {};
+            addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
+            addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
+            exportStreamStats(lastTwoWndStats);
+        }
+#endif
 
         // Accumulate these values into the global stats
         addVideoStats(m_ActiveWndVideoStats, m_GlobalVideoStats);

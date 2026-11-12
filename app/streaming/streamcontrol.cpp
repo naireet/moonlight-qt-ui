@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QThread>
+#include <QTimer>
 #include <QtDebug>
 
 namespace {
@@ -47,8 +48,10 @@ StreamControl::StreamControl(const QString& dataDir, QObject* parent)
     : QObject(parent),
       m_DataDir(dataDir),
       m_Watcher(nullptr),
+      m_StatsTimer(nullptr),
       m_Active(false),
-      m_StatsVisible(false)
+      m_StatsVisible(false),
+      m_HasStats(false)
 {
 }
 
@@ -77,6 +80,11 @@ QString StreamControl::statePath() const
     return m_DataDir + "/stream-state.json";
 }
 
+QString StreamControl::statsPath() const
+{
+    return m_DataDir + "/stream-stats.json";
+}
+
 QString StreamControl::controlDir() const
 {
     return m_DataDir + "/control";
@@ -85,8 +93,10 @@ QString StreamControl::controlDir() const
 void StreamControl::removeStaleState(const QString& dataDir)
 {
     QString path = dataDir + "/stream-state.json";
+    QString statsPath = dataDir + "/stream-stats.json";
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
+        QFile::remove(statsPath);
         return;
     }
     QJsonObject state = QJsonDocument::fromJson(file.readAll()).object();
@@ -96,6 +106,7 @@ void StreamControl::removeStaleState(const QString& dataDir)
     if (pid == QCoreApplication::applicationPid() || !isMoonlightProcess(pid)) {
         qInfo() << "Removing stale" << path << "from pid" << pid;
         QFile::remove(path);
+        QFile::remove(statsPath);
     }
 }
 
@@ -122,7 +133,45 @@ StreamControl::Command StreamControl::parseCommand(const QByteArray& json, qint6
     else if (command == "toggle-stats") {
         return CommandToggleStats;
     }
+    else if (command == "steam-overlay") {
+        return CommandSteamOverlay;
+    }
     return CommandNone;
+}
+
+QByteArray StreamControl::statsToJson(const Stats& stats)
+{
+    QJsonObject object;
+    object["version"] = 1;
+    object["ts"] = (double)stats.ts;
+
+    if (stats.width > 0 && stats.height > 0) {
+        object["width"] = stats.width;
+        object["height"] = stats.height;
+    }
+    if (!stats.codec.isEmpty()) {
+        object["codec"] = stats.codec;
+    }
+
+    // Rounded to 2 decimals to keep the file readable
+    auto addValue = [&object](const char* key, double value) {
+        if (value >= 0) {
+            object[key] = qRound64(value * 100) / 100.0;
+        }
+    };
+    addValue("fpsIncoming", stats.fpsIncoming);
+    addValue("fpsRendered", stats.fpsRendered);
+    addValue("bitrateMbps", stats.bitrateMbps);
+    addValue("networkLatencyMs", stats.networkLatencyMs);
+    addValue("networkLatencyVarianceMs", stats.networkLatencyVarianceMs);
+    addValue("hostLatencyMs", stats.hostLatencyMs);
+    addValue("decodeMs", stats.decodeMs);
+    addValue("queueMs", stats.queueMs);
+    addValue("renderMs", stats.renderMs);
+    addValue("framesDroppedNetworkPct", stats.framesDroppedNetworkPct);
+    addValue("framesDroppedJitterPct", stats.framesDroppedJitterPct);
+
+    return QJsonDocument(object).toJson();
 }
 
 void StreamControl::start()
@@ -189,11 +238,13 @@ void StreamControl::sessionStarted(const StreamInfo& info, bool statsVisible, Di
         m_Started = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         m_StatsVisible = statsVisible;
         m_Dispatcher = std::move(dispatcher);
+        m_HasStats = false;
     }
 
     // Write the state before picking up commands that arrived early
     QMetaObject::invokeMethod(this, "writeState", Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, "scan", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, "startStatsTimer", Qt::QueuedConnection);
 }
 
 void StreamControl::setStatsVisible(bool visible)
@@ -209,13 +260,53 @@ void StreamControl::setStatsVisible(bool visible)
     QMetaObject::invokeMethod(this, "writeState", Qt::QueuedConnection);
 }
 
+void StreamControl::updateStats(const Stats& stats)
+{
+    QMutexLocker locker(&m_Lock);
+    if (m_Active) {
+        m_Stats = stats;
+        m_HasStats = true;
+    }
+}
+
 void StreamControl::sessionEnded()
 {
-    // Done synchronously so the file is gone before the process can exit
+    // Done synchronously so the files are gone before the process can exit
     QMutexLocker locker(&m_Lock);
     m_Active = false;
     m_Dispatcher = nullptr;
+    m_HasStats = false;
     QFile::remove(statePath());
+    QFile::remove(statsPath());
+}
+
+void StreamControl::startStatsTimer()
+{
+    if (m_StatsTimer == nullptr) {
+        m_StatsTimer = new QTimer(this);
+        m_StatsTimer->setInterval(k_StatsIntervalMs);
+        connect(m_StatsTimer, &QTimer::timeout, this, &StreamControl::writeStats);
+    }
+    m_StatsTimer->start();
+}
+
+void StreamControl::writeStats()
+{
+    QMutexLocker locker(&m_Lock);
+    if (!m_Active) {
+        m_StatsTimer->stop();
+        return;
+    }
+    if (!m_HasStats) {
+        return;
+    }
+
+    QSaveFile file(statsPath());
+    if (!file.open(QIODevice::WriteOnly) ||
+            file.write(statsToJson(m_Stats)) < 0 ||
+            !file.commit()) {
+        qWarning() << "Failed to write" << statsPath();
+    }
 }
 
 void StreamControl::writeState()

@@ -2174,6 +2174,11 @@ void Session::exec()
                     m_OverlayManager.setOverlayState(Overlay::OverlayDebug,
                                                      !m_OverlayManager.isOverlayEnabled(Overlay::OverlayDebug));
                     break;
+                case StreamControl::CommandSteamOverlay:
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "Steam overlay requested by plugin command");
+                    m_InputHandler->sendSteamOverlayKeystroke();
+                    break;
                 default:
                     break;
                 }
