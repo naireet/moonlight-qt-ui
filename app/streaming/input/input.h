@@ -20,7 +20,6 @@ struct GamepadState {
 #endif
 
     SDL_TimerID mouseEmulationTimer;
-    SDL_TimerID steamOverlayKeyTimer;
     uint32_t lastStartDownTime;
 
     bool clickpadButtonEmulationEnabled;
@@ -138,6 +137,10 @@ public:
 
     void raiseAllKeys();
 
+    // Sends a held Shift+Tab to open/close the Steam overlay on the host.
+    // Ignored if a previous keystroke is still being held.
+    void sendSteamOverlayKeystroke();
+
     void notifyMouseLeave();
 
     void notifyFocusLost();
@@ -204,8 +207,7 @@ private:
     static
     void sendSteamOverlayKeysUp();
 
-    static
-    void cancelSteamOverlayKeyHold(GamepadState* state);
+    void cancelSteamOverlayKeyHold();
 
     static
     Uint32 releaseLeftButtonTimerCallback(Uint32 interval, void* param);
@@ -232,6 +234,9 @@ private:
 
     int m_GamepadMask;
     GamepadState m_GamepadState[MAX_GAMEPADS];
+    // Releases the Steam overlay keystroke. Shared by every trigger (gamepad
+    // chord, Deckstream plugin) so only one hold is ever in flight.
+    SDL_TimerID m_SteamOverlayKeyTimer;
     QSet<short> m_KeysDown;
     bool m_FakeMouseCaptureActive;
     bool m_KeyboardCaptureActive;

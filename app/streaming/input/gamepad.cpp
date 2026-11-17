@@ -227,14 +227,14 @@ void SdlInputHandler::sendSteamOverlayKeysUp()
 // (or is firing concurrently), SDL_RemoveTimer() is a no-op for the stale ID and
 // the only consequence is a duplicate key-up, which is harmless. We never take the
 // opposite risk of skipping the release.
-void SdlInputHandler::cancelSteamOverlayKeyHold(GamepadState* state)
+void SdlInputHandler::cancelSteamOverlayKeyHold()
 {
-    if (state->steamOverlayKeyTimer == 0) {
+    if (m_SteamOverlayKeyTimer == 0) {
         return;
     }
 
-    SDL_RemoveTimer(state->steamOverlayKeyTimer);
-    state->steamOverlayKeyTimer = 0;
+    SDL_RemoveTimer(m_SteamOverlayKeyTimer);
+    m_SteamOverlayKeyTimer = 0;
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "Releasing Steam overlay keystroke early");
@@ -244,18 +244,51 @@ void SdlInputHandler::cancelSteamOverlayKeyHold(GamepadState* state)
 
 Uint32 SdlInputHandler::steamOverlayKeyTimerCallback(Uint32, void *param)
 {
-    auto gamepad = reinterpret_cast<GamepadState*>(param);
-
     // Clear the timer ID first so a concurrent cancellation path sees the hold as
-    // finished. Note we intentionally don't dereference gamepad->controller or
-    // gamepad->inputHandler here: releasing host keys must not depend on either
-    // still being valid.
-    gamepad->steamOverlayKeyTimer = 0;
+    // finished. Note we intentionally don't touch the input handler otherwise:
+    // releasing host keys must not depend on any other state.
+    *reinterpret_cast<SDL_TimerID*>(param) = 0;
 
     sendSteamOverlayKeysUp();
 
     // One-shot
     return 0;
+}
+
+void SdlInputHandler::sendSteamOverlayKeystroke()
+{
+    // If a hold from a previous trigger is still in flight, ignore this one
+    // rather than restarting or stacking the hold. Ignoring guarantees exactly
+    // one down/up pair per keystroke, which keeps the stuck-key analysis simple
+    // and avoids extending the Shift press into keyboard auto-repeat territory.
+    if (m_SteamOverlayKeyTimer != 0) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Ignoring Steam overlay request: keystroke still in flight");
+        return;
+    }
+
+    // Force raise all keys to ensure that none of them interfere with the
+    // keystroke we're going to send
+    raiseAllKeys();
+
+    // Press Shift+Tab now and release it after STEAM_OVERLAY_KEY_HOLD_TIME.
+    // The host's overlay hotkey detection samples keyboard state, so the keys
+    // must stay down long enough to be observed. These are deliberately not
+    // tracked in m_KeysDown because we own their release explicitly.
+    LiSendKeyboardEvent(0x8000 | VK_LSHIFT, KEY_ACTION_DOWN, MODIFIER_SHIFT);
+    LiSendKeyboardEvent(0x8000 | VK_TAB, KEY_ACTION_DOWN, MODIFIER_SHIFT);
+
+    m_SteamOverlayKeyTimer = SDL_AddTimer(STEAM_OVERLAY_KEY_HOLD_TIME,
+                                          SdlInputHandler::steamOverlayKeyTimerCallback,
+                                          &m_SteamOverlayKeyTimer);
+    if (m_SteamOverlayKeyTimer == 0) {
+        // We couldn't arm the release timer, so release immediately rather
+        // than leave Shift+Tab stuck down on the host
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "SDL_AddTimer() failed for Steam overlay keystroke: %s",
+                     SDL_GetError());
+        sendSteamOverlayKeysUp();
+    }
 }
 
 void SdlInputHandler::handleControllerAxisEvent(SDL_ControllerAxisEvent* event)
@@ -477,41 +510,10 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         LiSendMultiControllerEvent(state->index, m_GamepadMask,
                                    0, 0, 0, 0, 0, 0, 0);
 
-        // If a hold from a previous trigger is still in flight, ignore this one
-        // rather than restarting or stacking the hold. Ignoring guarantees exactly
-        // one down/up pair per keystroke, which keeps the stuck-key analysis simple
-        // and avoids extending the Shift press into keyboard auto-repeat territory.
-        if (state->steamOverlayKeyTimer != 0) {
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                        "Ignoring Steam overlay combo: keystroke still in flight");
-            return;
-        }
-
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected Steam overlay gamepad combo");
 
-        // Force raise all keys to ensure that none of them interfere with the
-        // keystroke we're going to send
-        raiseAllKeys();
-
-        // Press Shift+Tab now and release it after STEAM_OVERLAY_KEY_HOLD_TIME.
-        // The host's overlay hotkey detection samples keyboard state, so the keys
-        // must stay down long enough to be observed. These are deliberately not
-        // tracked in m_KeysDown because we own their release explicitly.
-        LiSendKeyboardEvent(0x8000 | VK_LSHIFT, KEY_ACTION_DOWN, MODIFIER_SHIFT);
-        LiSendKeyboardEvent(0x8000 | VK_TAB, KEY_ACTION_DOWN, MODIFIER_SHIFT);
-
-        state->steamOverlayKeyTimer = SDL_AddTimer(STEAM_OVERLAY_KEY_HOLD_TIME,
-                                                   SdlInputHandler::steamOverlayKeyTimerCallback,
-                                                   state);
-        if (state->steamOverlayKeyTimer == 0) {
-            // We couldn't arm the release timer, so release immediately rather
-            // than leave Shift+Tab stuck down on the host
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                         "SDL_AddTimer() failed for Steam overlay keystroke: %s",
-                         SDL_GetError());
-            sendSteamOverlayKeysUp();
-        }
+        sendSteamOverlayKeystroke();
         return;
     }
 
@@ -878,9 +880,6 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
                 Session::get()->notifyMouseEmulationMode(false);
                 SDL_RemoveTimer(state->mouseEmulationTimer);
             }
-
-            // Release Shift+Tab on the host if this controller disappeared mid-hold
-            cancelSteamOverlayKeyHold(state);
 
             SDL_GameControllerClose(state->controller);
 

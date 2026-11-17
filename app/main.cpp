@@ -52,6 +52,7 @@
 #include "backend/computermanager.h"
 #include "backend/systemproperties.h"
 #include "streaming/session.h"
+#include "backend/gamemode.h"
 #include "settings/streamingprofilemanager.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
@@ -445,6 +446,11 @@ int main(int argc, char *argv[])
         // Initialize paths for standard installation
         Path::initialize(false);
     }
+
+#ifdef Q_OS_LINUX
+    // Don't let the Deckstream plugin think a crashed stream is still running
+    StreamControl::removeStaleState(GameMode::dataDir());
+#endif
 
     // Override the default QML cache directory with the one we chose
     if (qEnvironmentVariableIsEmpty("QML_DISK_CACHE_PATH")) {

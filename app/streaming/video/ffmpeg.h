@@ -53,6 +53,11 @@ private:
     void stringifyVideoStats(VIDEO_STATS& stats, char* output, int length);
     void stringifyVideoStatsLite(VIDEO_STATS& stats, char* output, int length);
 
+    const char* getCodecString();
+
+    // Hands the overlay's stats to the Deckstream plugin (Linux only)
+    void exportStreamStats(VIDEO_STATS& stats);
+
     void logVideoStats(VIDEO_STATS& stats, const char* title);
 
     void addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst);

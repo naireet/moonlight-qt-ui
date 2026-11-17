@@ -16,14 +16,12 @@
 #include <QUuid>
 #include <QtDebug>
 
-namespace {
-
-QString dataDir()
+QString GameMode::dataDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/moonlight-stream";
 }
 
-QString stripZeroWidth(QString text)
+QString GameMode::stripZeroWidth(QString text)
 {
     static const ushort k_ZeroWidthChars[] = { 0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF };
     for (ushort c : k_ZeroWidthChars) {
@@ -31,6 +29,11 @@ QString stripZeroWidth(QString text)
     }
     return text;
 }
+
+namespace {
+
+using GameMode::dataDir;
+using GameMode::stripZeroWidth;
 
 QJsonValue boxArtValue(NvComputer* computer, int appId)
 {

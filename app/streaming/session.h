@@ -10,6 +10,7 @@
 #include "video/decoder.h"
 #include "audio/renderers/renderer.h"
 #include "video/overlaymanager.h"
+#include "streamcontrol.h"
 
 class SupportedVideoFormatList : public QList<int>
 {
@@ -287,6 +288,9 @@ private:
     int m_FlushingWindowEventsRef;
     QStringList m_LaunchWarnings;
     bool m_ShouldExit;
+    // Set when the Deckstream plugin ends the stream (see streamcontrol.h).
+    // Overrides quitAppAfter and suppresses auto-reconnect.
+    StreamControl::Command m_ControlEndCommand;
 
     bool m_AsyncConnectionSuccess;
     int m_PortTestResults;
